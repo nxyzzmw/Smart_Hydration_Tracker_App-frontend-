@@ -1,12 +1,12 @@
 import { View, Text } from 'react-native'
 import React from 'react'
 
-const modal = () => {
+const reminder = () => {
   return (
     <View>
-      <Text>modal</Text>
+      <Text>reminder</Text>
     </View>
   )
 }
 
-export default modal
+export default reminder
