@@ -30,10 +30,7 @@ export default function Header({
     try {
       setLoggingOut(true);
 
-      await AsyncStorage.multiRemove([
-        "auth_token",
-        "refresh_token",
-      ]);
+      await AsyncStorage.removeItem("auth_token");
 
       router.replace("/auth/login");
 

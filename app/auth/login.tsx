@@ -36,30 +36,15 @@ export default function Login() {
       JSON.stringify(result, null, 2)
     );
 
-    // Try all possible backend formats
     const accessToken =
-      result.accessToken ||
-      result.token ||
-      result.access_token ||
-      result?.data?.accessToken ||
-      result?.data?.token;
-
-    const refreshToken =
-      result.refreshToken ||
-      result.refresh_token ||
-      result?.data?.refreshToken ||
-      result?.data?.refresh_token;
-
-    if (!accessToken || !refreshToken) {
+      result.access_token || result?.data?.access_token;
+    if (!accessToken) {
       throw new Error(
         "Backend did not return tokens correctly"
       );
     }
 
-    await AsyncStorage.multiSet([
-      ["auth_token", accessToken],
-      ["refresh_token", refreshToken],
-    ]);
+    await AsyncStorage.setItem("auth_token", accessToken);
 
     router.replace("/tabs");
 

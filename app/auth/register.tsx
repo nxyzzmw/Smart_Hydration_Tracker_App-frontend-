@@ -72,21 +72,15 @@ export default function Register() {
 
     // Normalize backend response
     const accessToken =
-      loginResult.accessToken || loginResult.token;
+      loginResult.access_token || loginResult?.data?.access_token;
 
-    const refreshToken =
-      loginResult.refreshToken || loginResult.refresh_token;
-
-    if (!accessToken || !refreshToken) {
+    if (!accessToken) {
       console.log("Login response:", loginResult);
       throw new Error("Invalid token response from server");
     }
 
-    // Step 3: Save BOTH tokens atomically
-    await AsyncStorage.multiSet([
-      ["auth_token", accessToken],
-      ["refresh_token", refreshToken],
-    ]);
+    // Step 3: Save access token
+    await AsyncStorage.setItem("auth_token", accessToken);
 
     // Step 4: Redirect
     router.replace("/tabs");

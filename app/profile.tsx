@@ -30,10 +30,7 @@ export default function Profile() {
   // Safe logout
   const logout = async () => {
     try {
-      await AsyncStorage.multiRemove([
-        "auth_token",
-        "refresh_token",
-      ]);
+      await AsyncStorage.removeItem("auth_token");
 
       router.replace("/auth/login");
 
