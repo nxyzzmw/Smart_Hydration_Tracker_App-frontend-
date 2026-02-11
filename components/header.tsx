@@ -8,12 +8,14 @@ type HeaderProps = {
   title?: string;
   showBack?: boolean;
   rightIcon?: "profile" | "logout";
+  onRightPress?: () => void;
 };
 
 export default function Header({
   title = "HydroTrack",
   showBack = false,
   rightIcon = "profile",
+  onRightPress,
 }: HeaderProps) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -44,6 +46,11 @@ export default function Header({
   };
 
   const handleRightPress = () => {
+    if (onRightPress) {
+      onRightPress();
+      return;
+    }
+
     if (rightIcon === "profile") {
       router.push("/profile");
     } else {
@@ -58,15 +65,15 @@ export default function Header({
 
   const iconColor =
     rightIcon === "logout"
-      ? "#FF3B30"
-      : "#000";
+      ? "#FF5B4D"
+      : "#124565";
 
   return (
     <View style={styles.container}>
       <View style={styles.left}>
         {showBack ? (
           <Pressable onPress={handleBack}>
-            <Ionicons name="arrow-back" size={26} color="#000" />
+            <Ionicons name="arrow-back" size={24} color="#124565" />
           </Pressable>
         ) : (
           <Text style={styles.logoText}>{title}</Text>
@@ -93,24 +100,30 @@ export default function Header({
 
 const styles = StyleSheet.create({
   container: {
-    height: 60,
-    paddingHorizontal: 16,
+    height: 64,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    backgroundColor: "#F4F9FD",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#D6E6F1",
   },
   left: {
     width: "auto",
   },
   logoText: {
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "800",
+    color: "#0E1E40",
   },
   title: {
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "800",
+    color: "#0E1E40",
   },
 });

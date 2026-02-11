@@ -17,6 +17,6 @@ export default function Screen({ children }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#EAF2F8",
   },
 });
