@@ -3,6 +3,10 @@ import {
   getUserProfile,
   updateUserProfile,
 } from "../src/api/userApi";
+import {
+  emitProfileChanged,
+  subscribeProfileChanged,
+} from "../src/events/profileEvents";
 
 export function useProfile() {
   const [profile, setProfile] = useState<any>(null);
@@ -49,17 +53,26 @@ export function useProfile() {
     fetchProfile();
   }, [fetchProfile]);
 
+  useEffect(() => {
+    const unsubscribe = subscribeProfileChanged(() => {
+      fetchProfile();
+    });
+    return unsubscribe;
+  }, [fetchProfile]);
+
   // ✅ Update profile safely
   const updateProfile = useCallback(async (data: any) => {
     try {
       setSaving(true);
       setError(null);
 
-      const updated = await updateUserProfile(data);
+      await updateUserProfile(data);
+      const updated = await getUserProfile();
 
       if (mounted.current) {
         setProfile(updated);
       }
+      emitProfileChanged();
 
       return updated;
 

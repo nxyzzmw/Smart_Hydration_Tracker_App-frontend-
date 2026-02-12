@@ -1,12 +1,10 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, Alert } from "react-native";
+import { ScrollView, StyleSheet, View, Alert, Text } from "react-native";
 import Screen from "../../components/Screen";
 import {
   TextInput,
   Button,
-  Text,
   RadioButton,
-  Switch,
   SegmentedButtons,
 } from "react-native-paper";
 import { useRouter } from "expo-router";
@@ -15,6 +13,24 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 
 type Step = 1 | 2 | 3;
+
+const PROFILE_PRESETS = [
+  { key: "athlete", label: "Athlete" },
+  { key: "office_worker", label: "Office worker" },
+  { key: "outdoor_worker", label: "Outdoor worker" },
+  { key: "pregnant", label: "Pregnant" },
+  { key: "senior_citizen", label: "Senior citizen" },
+] as const;
+
+type ProfilePreset = (typeof PROFILE_PRESETS)[number]["key"];
+
+const segmentTheme = {
+  colors: {
+    secondaryContainer: "#A9D2E3",
+    onSecondaryContainer: "#0D203C",
+    outline: "#93BDD1",
+  },
+};
 
 export default function Register() {
   const router = useRouter();
@@ -33,6 +49,45 @@ export default function Register() {
   const [unit, setUnit] = useState("ml");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
+  const [selectedPreset, setSelectedPreset] = useState<ProfilePreset | null>(
+    null
+  );
+
+  const applyPreset = (preset: ProfilePreset) => {
+    setSelectedPreset(preset);
+
+    if (preset === "athlete") {
+      setActivity("high");
+      setClimate("moderate");
+      setPregnancy(false);
+      return;
+    }
+    if (preset === "office_worker") {
+      setActivity("low");
+      setClimate("moderate");
+      setPregnancy(false);
+      return;
+    }
+    if (preset === "outdoor_worker") {
+      setActivity("high");
+      setClimate("hot");
+      setPregnancy(false);
+      return;
+    }
+    if (preset === "pregnant") {
+      setActivity("moderate");
+      setClimate("moderate");
+      setPregnancy(true);
+      return;
+    }
+
+    setActivity("low");
+    setClimate("moderate");
+    setPregnancy(false);
+    if (!age || Number(age) < 60) {
+      setAge("60");
+    }
+  };
 
   const clearFieldError = (field: string) => {
     setErrors((prev: any) => ({ ...prev, [field]: undefined }));
@@ -86,10 +141,10 @@ export default function Register() {
       name,
       email,
       password,
-      age,
+      age: Number(age),
       gender,
-      weight,
-      height,
+      weight: Number(weight),
+      height: Number(height),
       activity,
       climate,
       pregnancy,
@@ -269,14 +324,35 @@ export default function Register() {
 
           {step === 3 && (
             <View style={styles.formBlock}>
+              <Text style={styles.label}>Custom Profile</Text>
+              <View style={styles.presetWrap}>
+                {PROFILE_PRESETS.map((preset) => {
+                  const isActive = selectedPreset === preset.key;
+                  return (
+                    <Button
+                      key={preset.key}
+                      mode={isActive ? "contained" : "outlined"}
+                      compact
+                      onPress={() => applyPreset(preset.key)}
+                      style={styles.presetBtn}
+                      buttonColor={isActive ? "#14B2CF" : "#E9EEF4"}
+                      textColor={isActive ? "#FFFFFF" : "#4E6780"}
+                    >
+                      {preset.label}
+                    </Button>
+                  );
+                })}
+              </View>
+
               <Text style={styles.label}>Activity Level</Text>
               <SegmentedButtons
                 value={activity}
                 onValueChange={setActivity}
+                theme={segmentTheme}
                 buttons={[
-                  { value: "low", label: "Low" },
-                  { value: "moderate", label: "Moderate" },
-                  { value: "high", label: "High" },
+                  { value: "low", label: "Low", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                  { value: "moderate", label: "Moderate", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                  { value: "high", label: "High", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
                 ]}
               />
 
@@ -284,25 +360,22 @@ export default function Register() {
               <SegmentedButtons
                 value={climate}
                 onValueChange={setClimate}
+                theme={segmentTheme}
                 buttons={[
-                  { value: "cold", label: "Cold" },
-                  { value: "moderate", label: "Moderate" },
-                  { value: "hot", label: "Hot" },
+                  { value: "cold", label: "Cold", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                  { value: "moderate", label: "Moderate", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                  { value: "hot", label: "Hot", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
                 ]}
               />
-
-              <View style={styles.switchRow}>
-                <Text>Pregnancy / Breastfeeding</Text>
-                <Switch value={pregnancy} onValueChange={setPregnancy} color="#14B2CF" />
-              </View>
 
               <Text style={styles.label}>Unit</Text>
               <SegmentedButtons
                 value={unit}
                 onValueChange={setUnit}
+                theme={segmentTheme}
                 buttons={[
-                  { value: "ml", label: "ML" },
-                  { value: "oz", label: "OZ" },
+                  { value: "ml", label: "ML", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                  { value: "oz", label: "OZ", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
                 ]}
               />
             </View>
@@ -387,22 +460,23 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 24,
-    paddingTop: 88,
+    paddingTop: 72,
     paddingBottom: 40,
   },
   topIcon: {
     marginBottom: 14,
   },
   title: {
-    fontSize: 44,
-    lineHeight: 48,
-    fontWeight: "800",
-    color: "#0E1E40",
+    fontSize: 23,
+    lineHeight: 28,
+    fontWeight: "900",
+    color: "#0B1630",
   },
   subtitle: {
     marginTop: 4,
-    fontSize: 16,
-    color: "#5E718E",
+    fontSize: 15,
+    color: "#58708B",
+    fontWeight: "500",
   },
   stepperRow: {
     flexDirection: "row",
@@ -439,8 +513,9 @@ const styles = StyleSheet.create({
   label: {
     marginTop: 4,
     marginBottom: 2,
-    color: "#4D647F",
-    fontWeight: "700",
+    color: "#58708B",
+    fontSize: 15,
+    fontWeight: "500",
   },
   genderRow: {
     flexDirection: "row",
@@ -457,6 +532,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  presetWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  presetBtn: {
+    borderRadius: 14,
+    borderColor: "#D5DEE8",
+  },
   actionsRow: {
     flexDirection: "row",
     gap: 10,
@@ -470,7 +554,7 @@ const styles = StyleSheet.create({
   },
   centerNextButton: {
     minWidth: 220,
-    borderRadius: 18,
+    borderRadius: 16,
     shadowColor: "#13AFCB",
     shadowOpacity: 0.3,
     shadowRadius: 14,
@@ -480,11 +564,13 @@ const styles = StyleSheet.create({
   backButton: {
     flex: 1,
     borderRadius: 16,
-    borderColor: "#BCD3E2",
+    borderColor: "#9FBFD2",
+    borderWidth: 1.5,
+    backgroundColor: "#E7F1F7",
   },
   nextButton: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 16,
     shadowColor: "#13AFCB",
     shadowOpacity: 0.3,
     shadowRadius: 14,
@@ -492,7 +578,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   buttonContent: {
-    minHeight: 56,
+    minHeight: 54,
   },
   linkButton: {
     marginTop: 18,
@@ -500,6 +586,7 @@ const styles = StyleSheet.create({
   linkText: {
     color: "#10A8C5",
     fontWeight: "700",
+    fontSize: 15,
   },
   error: {
     color: "#B01919",

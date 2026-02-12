@@ -12,7 +12,6 @@ import {
   Button,
   Text,
   RadioButton,
-  Switch,
   SegmentedButtons,
 } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -20,6 +19,72 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import { useProfile } from "../hooks/useProfile";
+
+const PROFILE_PRESETS = [
+  { key: "athlete", label: "Athlete" },
+  { key: "office_worker", label: "Office worker" },
+  { key: "outdoor_worker", label: "Outdoor worker" },
+  { key: "pregnant", label: "Pregnant" },
+  { key: "senior_citizen", label: "Senior citizen" },
+] as const;
+
+type ProfilePreset = (typeof PROFILE_PRESETS)[number]["key"];
+
+const segmentTheme = {
+  colors: {
+    secondaryContainer: "#A9D2E3",
+    onSecondaryContainer: "#0D203C",
+    outline: "#93BDD1",
+  },
+};
+
+function detectPreset(form: any): ProfilePreset | null {
+  if (!form) return null;
+  const age = Number(form.age);
+
+  if (form.pregnancy) return "pregnant";
+  if (age >= 60) return "senior_citizen";
+  if (form.activity === "high" && form.climate === "moderate") return "athlete";
+  if (form.activity === "high" && form.climate === "hot") return "outdoor_worker";
+  if (form.activity === "low" && form.climate === "moderate") return "office_worker";
+
+  return null;
+}
+
+function applyPreset(form: any, preset: ProfilePreset) {
+  const next = { ...form };
+
+  if (preset === "athlete") {
+    next.activity = "high";
+    next.climate = "moderate";
+    next.pregnancy = false;
+  }
+  if (preset === "office_worker") {
+    next.activity = "low";
+    next.climate = "moderate";
+    next.pregnancy = false;
+  }
+  if (preset === "outdoor_worker") {
+    next.activity = "high";
+    next.climate = "hot";
+    next.pregnancy = false;
+  }
+  if (preset === "pregnant") {
+    next.activity = "moderate";
+    next.climate = "moderate";
+    next.pregnancy = true;
+  }
+  if (preset === "senior_citizen") {
+    next.activity = "low";
+    next.climate = "moderate";
+    next.pregnancy = false;
+    if (!next.age || Number(next.age) < 60) {
+      next.age = "60";
+    }
+  }
+
+  return next;
+}
 
 function displayText(value: any) {
   if (value === null || value === undefined || value === "") {
@@ -72,7 +137,15 @@ export default function Profile() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await updateProfile(form);
+      await updateProfile({
+        ...form,
+        age: Number(form.age),
+        weight: Number(form.weight),
+        height: Number(form.height),
+        gender: form.gender,
+        activity: form.activity,
+        climate: form.climate,
+      });
       setIsEditing(false);
     } catch (error) {
       console.log("Update error:", error);
@@ -98,25 +171,34 @@ export default function Profile() {
   }
 
   const initial = (form.name || "U").charAt(0).toUpperCase();
+  const selectedPreset = detectPreset(form);
 
   return (
     <Screen>
+      <View style={styles.pageHeader}>
+        <Pressable onPress={() => router.back()} style={styles.headerIconBtn}>
+          <Ionicons name="arrow-back" size={24} color="#4A5D77" />
+        </Pressable>
+        <Text style={styles.pageTitle}>Profile</Text>
+        <View style={styles.headerRight}>
+          {!isEditing ? (
+            <Pressable
+              onPress={() => setIsEditing(true)}
+              style={styles.headerIconBtn}
+            >
+              <Ionicons name="create-outline" size={20} color="#14B2CF" />
+            </Pressable>
+          ) : null}
+          <Pressable onPress={logout} style={styles.headerIconBtn}>
+            <Ionicons name="log-out-outline" size={22} color="#F04444" />
+          </Pressable>
+        </View>
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topBar}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn}>
-            <Ionicons name="arrow-back" size={26} color="#455A77" />
-          </Pressable>
-
-          <Text style={styles.topTitle}>Profile</Text>
-
-          <Pressable onPress={logout} style={styles.iconBtn}>
-            <Ionicons name="log-out-outline" size={25} color="#F04444" />
-          </Pressable>
-        </View>
-
         {!isEditing ? (
           <>
             <View style={styles.identityCard}>
@@ -148,22 +230,22 @@ export default function Profile() {
                 <Text style={styles.sectionTitle}>Hydration Preferences</Text>
               </View>
 
+              <InfoRow
+                label="Profile preset"
+                value={
+                  selectedPreset
+                    ? displayText(
+                        PROFILE_PRESETS.find((p) => p.key === selectedPreset)?.label
+                      )
+                    : "Custom"
+                }
+              />
               <InfoRow label="Activity" value={displayText(form.activity)} />
               <InfoRow label="Climate" value={displayText(form.climate)} />
               <InfoRow label="Pregnancy" value={displayText(form.pregnancy)} />
               <InfoRow label="Unit" value={displayText(form.unit)} noBorder />
             </View>
 
-            <Button
-              mode="contained"
-              icon="pencil"
-              onPress={() => setIsEditing(true)}
-              buttonColor="#14B2CF"
-              style={styles.editBtn}
-              contentStyle={styles.editBtnContent}
-            >
-              Edit Profile
-            </Button>
           </>
         ) : (
           <View style={styles.editCard}>
@@ -199,6 +281,34 @@ export default function Profile() {
               outlineColor="#D5E6F1"
               activeOutlineColor="#9DC6DA"
             />
+
+            <Text style={styles.label}>Custom Profile</Text>
+            <View style={styles.presetWrap}>
+              {PROFILE_PRESETS.map((preset) => {
+                const isActive = selectedPreset === preset.key;
+                return (
+                  <Pressable
+                    key={preset.key}
+                    style={[
+                      styles.presetChip,
+                      isActive && styles.presetChipActive,
+                    ]}
+                    onPress={() =>
+                      setForm((prev: any) => applyPreset(prev, preset.key))
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.presetChipText,
+                        isActive && styles.presetChipTextActive,
+                      ]}
+                    >
+                      {preset.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
             <Text style={styles.label}>Gender</Text>
             <RadioButton.Group
@@ -247,10 +357,11 @@ export default function Profile() {
             <SegmentedButtons
               value={form.activity}
               onValueChange={(v) => setForm({ ...form, activity: v })}
+              theme={segmentTheme}
               buttons={[
-                { value: "low", label: "Low" },
-                { value: "moderate", label: "Moderate" },
-                { value: "high", label: "High" },
+                { value: "low", label: "Low", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                { value: "moderate", label: "Moderate", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                { value: "high", label: "High", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
               ]}
             />
 
@@ -258,29 +369,22 @@ export default function Profile() {
             <SegmentedButtons
               value={form.climate}
               onValueChange={(v) => setForm({ ...form, climate: v })}
+              theme={segmentTheme}
               buttons={[
-                { value: "cold", label: "Cold" },
-                { value: "moderate", label: "Moderate" },
-                { value: "hot", label: "Hot" },
+                { value: "cold", label: "Cold", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                { value: "moderate", label: "Moderate", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                { value: "hot", label: "Hot", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
               ]}
             />
-
-            <View style={styles.switchRow}>
-              <Text>Pregnancy / BreastFeeding</Text>
-              <Switch
-                value={form.pregnancy}
-                onValueChange={(v) => setForm({ ...form, pregnancy: v })}
-                color="#14B2CF"
-              />
-            </View>
 
             <Text style={styles.label}>Unit</Text>
             <SegmentedButtons
               value={form.unit}
               onValueChange={(v) => setForm({ ...form, unit: v })}
+              theme={segmentTheme}
               buttons={[
-                { value: "ml", label: "ML" },
-                { value: "oz", label: "OZ" },
+                { value: "ml", label: "ML", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
+                { value: "oz", label: "OZ", checkedColor: "#0D203C", uncheckedColor: "#3D5B78" },
               ]}
             />
 
@@ -315,35 +419,44 @@ export default function Profile() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 26,
-    backgroundColor: "#ECEFF3",
-  },
-  topBar: {
-    minHeight: 72,
-    borderRadius: 22,
-    backgroundColor: "#F6F8FB",
-    borderWidth: 1,
-    borderColor: "#DDE5EC",
     paddingHorizontal: 16,
+    paddingTop: 10,
+    gap: 16,
+    paddingBottom: 26,
+  },
+  pageHeader: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  topTitle: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#0E1E40",
+  pageTitle: {
+    fontSize: 23,
+    fontWeight: "900",
+    color: "#0B1630",
   },
-  iconBtn: {
-    width: 34,
+  headerIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F8FBFE",
+    borderWidth: 1,
+    borderColor: "#D8E2EC",
     alignItems: "center",
     justifyContent: "center",
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   identityCard: {
-    backgroundColor: "#CFE4F2",
+    backgroundColor: "#D9EEFA",
     borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "#A8D7F4",
     padding: 18,
     flexDirection: "row",
     alignItems: "center",
@@ -353,7 +466,7 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 22,
-    backgroundColor: "#22B9D6",
+    backgroundColor: "#14B2CF",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#22B9D6",
@@ -381,11 +494,11 @@ const styles = StyleSheet.create({
     color: "#576A86",
   },
   infoCard: {
-    backgroundColor: "#F7F9FB",
-    borderRadius: 30,
+    backgroundColor: "#F6F7F9",
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: "#DDE5EC",
-    padding: 16,
+    borderColor: "#E2EAF1",
+    padding: 18,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -394,8 +507,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
     color: "#0E1E40",
   },
   infoRow: {
@@ -404,7 +517,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#DEE6ED",
+    borderBottomColor: "#E2EAF1",
   },
   noBorder: {
     borderBottomWidth: 0,
@@ -418,27 +531,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  editBtn: {
-    borderRadius: 18,
-    shadowColor: "#14B2CF",
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  },
-  editBtnContent: {
-    minHeight: 64,
-  },
   editCard: {
-    backgroundColor: "#F7F9FB",
-    borderRadius: 24,
+    backgroundColor: "#F6F7F9",
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: "#DDE5EC",
-    padding: 14,
-    gap: 10,
+    borderColor: "#E2EAF1",
+    padding: 18,
+    gap: 12,
   },
   input: {
-    backgroundColor: "#EFF4F8",
+    backgroundColor: "#F8FBFE",
   },
   label: {
     color: "#4E6780",
@@ -455,6 +557,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
+  },
+  presetWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  presetChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "#E9EEF4",
+    borderWidth: 1,
+    borderColor: "#D5DEE8",
+  },
+  presetChipActive: {
+    backgroundColor: "#DFF2FB",
+    borderColor: "#8ED4EA",
+  },
+  presetChipText: {
+    color: "#4E6780",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  presetChipTextActive: {
+    color: "#0E1E40",
   },
   switchRow: {
     flexDirection: "row",

@@ -6,8 +6,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Text,
 } from "react-native";
-import { TextInput, Button, Text } from "react-native-paper";
+import { TextInput, Button } from "react-native-paper";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Screen from "../../components/Screen";
@@ -170,32 +171,33 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 28,
-    paddingTop: 120,
+    paddingTop: 96,
     paddingBottom: 40,
   },
   topIconWrap: {
     marginBottom: 16,
   },
   title: {
-    fontSize: 64,
-    lineHeight: 66,
-    fontWeight: "800",
-    color: "#0E1E40",
-    marginBottom: 8,
+    fontSize: 23,
+    lineHeight: 28,
+    fontWeight: "900",
+    color: "#0B1630",
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 18,
-    color: "#5E718E",
-    marginBottom: 28,
+    fontSize: 15,
+    color: "#58708B",
+    fontWeight: "500",
+    marginBottom: 22,
   },
   inputGroup: {
     marginBottom: 14,
   },
   label: {
-    color: "#11AAC7",
-    fontSize: 14,
-    fontWeight: "700",
-    marginLeft: 14,
+    color: "#58708B",
+    fontSize: 15,
+    fontWeight: "500",
+    marginLeft: 12,
     marginBottom: 6,
   },
   input: {
@@ -206,8 +208,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   loginButton: {
-    marginTop: 18,
-    borderRadius: 22,
+    marginTop: 16,
+    borderRadius: 16,
     shadowColor: "#13AFCB",
     shadowOpacity: 0.3,
     shadowRadius: 14,
@@ -215,7 +217,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   loginButtonContent: {
-    minHeight: 64,
+    minHeight: 54,
   },
   linkButton: {
     marginTop: 26,
@@ -223,7 +225,7 @@ const styles = StyleSheet.create({
   linkText: {
     color: "#10A8C5",
     fontWeight: "700",
-    fontSize: 18,
+    fontSize: 15,
   },
   bottomDecoWrap: {
     marginTop: 52,

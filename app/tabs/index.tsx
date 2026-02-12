@@ -1,21 +1,30 @@
 import React, { useMemo, useState } from "react";
 import {
+  Modal,
+  Pressable,
+  Text,
   View,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
 import {
-  Text,
   Button,
   TextInput,
   IconButton,
 } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import Screen from "../../components/Screen";
-import Header from "../../components/header";
+import TabHeader from "../../components/TabHeader";
 import { useProfile } from "../../hooks/useProfile";
 import { useWater } from "../../hooks/useWater";
+import {
+  fromMl,
+  normalizeUnit,
+  roundVolume,
+  toMl,
+} from "../../src/utils/units";
 
 function formatTime(iso?: string) {
   if (!iso) return "--:--";
@@ -29,7 +38,9 @@ function formatTime(iso?: string) {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [customAmount, setCustomAmount] = useState("");
+  const [customModalVisible, setCustomModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState("");
 
@@ -57,7 +68,10 @@ export default function Dashboard() {
   if (profileLoading || loading) {
     return (
       <Screen>
-        <Header title="Dashboard" />
+        <TabHeader
+          title="Dashboard"
+          onProfilePress={() => router.push("/profile")}
+        />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#14B2CF" />
         </View>
@@ -66,42 +80,66 @@ export default function Dashboard() {
   }
 
   const username = profile?.name || "Friend";
+  const unit = normalizeUnit(profile?.unit);
   const goal = profile?.dailyGoal;
   const progress =
     goal && goal > 0
       ? Math.min(Math.round((total / goal) * 100), 100)
       : 0;
+  const displayTotal = roundVolume(fromMl(total, unit), unit);
+  const displayGoal = roundVolume(fromMl(Number(goal || 0), unit), unit);
+  const quickAddMlValues = [250, 500, 750];
 
   const handleAddAmount = async (amount: number) => {
     if (!amount || amount <= 0) return;
-    await addLog(amount);
+    try {
+      await addLog(amount);
+    } catch (error) {
+      console.log("Add log failed:", error);
+    }
   };
 
   const handleAddCustom = async () => {
-    const amount = Number(customAmount);
-    if (!amount || amount <= 0) return;
-    await addLog(amount);
-    setCustomAmount("");
+    const inputAmount = Number(customAmount);
+    if (!inputAmount || inputAmount <= 0) return;
+    const amountMl = Math.round(toMl(inputAmount, unit));
+    if (amountMl <= 0) return;
+    try {
+      await addLog(amountMl);
+      setCustomAmount("");
+      setCustomModalVisible(false);
+    } catch (error) {
+      console.log("Add custom log failed:", error);
+    }
   };
 
   const startEdit = (id: string, amountMl: number) => {
     setEditingId(id);
-    setEditAmount(String(amountMl));
+    setEditAmount(String(roundVolume(fromMl(amountMl, unit), unit)));
   };
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
-    const amount = Number(editAmount);
-    if (!amount || amount <= 0) return;
+    const amountInput = Number(editAmount);
+    if (!amountInput || amountInput <= 0) return;
+    const amountMl = Math.round(toMl(amountInput, unit));
+    if (amountMl <= 0) return;
 
-    await updateLog(editingId, amount);
-    setEditingId(null);
-    setEditAmount("");
+    try {
+      await updateLog(editingId, amountMl);
+      setEditingId(null);
+      setEditAmount("");
+    } catch (error) {
+      console.log("Update log failed:", error);
+    }
   };
 
   return (
     <Screen>
-      <Header title="Dashboard" />
+      <TabHeader
+        title="Dashboard"
+        onProfilePress={() => router.push("/profile")}
+      />
 
       <ScrollView
         contentContainerStyle={styles.container}
@@ -116,8 +154,8 @@ export default function Dashboard() {
           </Text>
 
           <View style={styles.amountRow}>
-            <Text style={styles.totalText}>{total}</Text>
-            <Text style={styles.goalText}> / {goal || 0} ml</Text>
+            <Text style={styles.totalText}>{displayTotal}</Text>
+            <Text style={styles.goalText}> / {displayGoal} {unit}</Text>
           </View>
 
           <View style={styles.progressLabelRow}>
@@ -145,54 +183,43 @@ export default function Dashboard() {
           </View>
 
           <View style={styles.quickGrid}>
-            <Button
-              mode="contained"
-              icon="cup-water"
-              buttonColor="#14B2CF"
-              textColor="#FFFFFF"
-              onPress={() => handleAddAmount(250)}
+            <Pressable
+              onPress={() => handleAddAmount(quickAddMlValues[0])}
               disabled={saving}
               style={styles.quickTile}
-              contentStyle={styles.quickTileContent}
             >
-              +250 ml
-            </Button>
+              <Text style={styles.quickTileLabel}>
+                {roundVolume(fromMl(quickAddMlValues[0], unit), unit)}
+              </Text>
+            </Pressable>
 
-            <Button
-              mode="contained"
-              icon="cup-water"
-              buttonColor="#14B2CF"
-              textColor="#FFFFFF"
-              onPress={() => handleAddAmount(500)}
+            <Pressable
+              onPress={() => handleAddAmount(quickAddMlValues[1])}
               disabled={saving}
               style={styles.quickTile}
-              contentStyle={styles.quickTileContent}
             >
-              +500 ml
-            </Button>
-          </View>
+              <Text style={styles.quickTileLabel}>
+                {roundVolume(fromMl(quickAddMlValues[1], unit), unit)}
+              </Text>
+            </Pressable>
 
-          <View style={styles.customRow}>
-            <TextInput
-              mode="outlined"
-              placeholder="Custom amount (ml)"
-              value={customAmount}
-              onChangeText={setCustomAmount}
-              keyboardType="numeric"
-              style={styles.customInput}
+            <Pressable
+              onPress={() => handleAddAmount(quickAddMlValues[2])}
               disabled={saving}
-              outlineColor="#E1E7ED"
-              activeOutlineColor="#C3D6E4"
-            />
-            <Button
-              mode="contained"
-              onPress={handleAddCustom}
-              disabled={saving}
-              buttonColor="#14B2CF"
-              style={styles.addButton}
+              style={styles.quickTile}
             >
-              Add
-            </Button>
+              <Text style={styles.quickTileLabel}>
+                {roundVolume(fromMl(quickAddMlValues[2], unit), unit)}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setCustomModalVisible(true)}
+              disabled={saving}
+              style={styles.quickTileAdd}
+            >
+              <Ionicons name="add" size={24} color="#FFFFFF" />
+            </Pressable>
           </View>
         </View>
 
@@ -218,9 +245,15 @@ export default function Dashboard() {
               No water logged yet
             </Text>
           ) : (
-            sortedLogs.map((log) => (
-              <View key={log.id} style={styles.logItem}>
-                {editingId === log.id ? (
+            sortedLogs.map((log, idx) => {
+              const logId = log.id;
+              const rowKey =
+                logId ||
+                `${log.timestamp ?? "no-ts"}-${log.amountMl ?? 0}-${idx}`;
+
+              return (
+                <View key={rowKey} style={styles.logItem}>
+                {editingId === logId ? (
                   <View style={styles.editRow}>
                     <TextInput
                       mode="outlined"
@@ -228,7 +261,7 @@ export default function Dashboard() {
                       onChangeText={setEditAmount}
                       keyboardType="numeric"
                       style={styles.editInput}
-                      label="Amount (ml)"
+                      label={`Amount (${unit})`}
                       disabled={saving}
                       outlineColor="#D5E6F1"
                       activeOutlineColor="#9DC6DA"
@@ -261,7 +294,7 @@ export default function Dashboard() {
                       </View>
                       <View>
                         <Text style={styles.logAmount}>
-                          {log.amountMl} ml
+                          {roundVolume(fromMl(log.amountMl, unit), unit)} {unit}
                         </Text>
                         <Text style={styles.logTime}>
                           {formatTime(log.timestamp)}
@@ -275,7 +308,8 @@ export default function Dashboard() {
                         size={18}
                         mode="outlined"
                         onPress={() =>
-                          startEdit(log.id, log.amountMl)
+                          logId &&
+                          startEdit(logId, log.amountMl)
                         }
                         disabled={saving}
                       />
@@ -283,17 +317,76 @@ export default function Dashboard() {
                         icon="trash-can-outline"
                         size={18}
                         mode="outlined"
-                        onPress={() => deleteLog(log.id)}
+                        onPress={async () => {
+                          if (!logId) return;
+                          try {
+                            await deleteLog(logId);
+                          } catch (error) {
+                            console.log(
+                              "Delete log failed:",
+                              error
+                            );
+                          }
+                        }}
                         disabled={saving}
                       />
                     </View>
                   </>
                 )}
-              </View>
-            ))
+                </View>
+              );
+            })
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={customModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCustomModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setCustomModalVisible(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={() => null}>
+            <Text style={styles.modalTitle}>Custom amount</Text>
+            <TextInput
+              mode="outlined"
+              placeholder={`Custom amount (${unit})`}
+              value={customAmount}
+              onChangeText={setCustomAmount}
+              keyboardType="numeric"
+              style={styles.customInput}
+              disabled={saving}
+              outlineColor="#D5DEE8"
+              activeOutlineColor="#0A9CF0"
+            />
+            <View style={styles.modalActions}>
+              <Button
+                mode="text"
+                onPress={() => setCustomModalVisible(false)}
+                textColor="#5B6F86"
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                icon="plus"
+                onPress={handleAddCustom}
+                disabled={saving}
+                loading={saving}
+                buttonColor="#14B2CF"
+                style={styles.addButton}
+                contentStyle={styles.addButtonContent}
+              >
+                Add
+              </Button>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -301,8 +394,32 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
+    paddingTop: 10,
     paddingBottom: 24,
-    gap: 14,
+    gap: 16,
+  },
+  pageHeader: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pageTitle: {
+    fontSize: 23,
+    fontWeight: "900",
+    color: "#0B1630",
+  },
+  profileIconBtn: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#F8FBFE",
+    borderWidth: 1,
+    borderColor: "#D8E2EC",
+    alignItems: "center",
+    justifyContent: "center",
   },
   center: {
     flex: 1,
@@ -385,48 +502,98 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF2F8",
   },
   card: {
-    borderRadius: 22,
+    borderRadius: 28,
     backgroundColor: "#F5F7F9",
-    padding: 14,
-    gap: 12,
+    padding: 18,
+    gap: 14,
     borderWidth: 1,
-    borderColor: "#E3E9EE",
+    borderColor: "#E2EAF1",
+    shadowColor: "#0E1E40",
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   sectionHeading: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
   sectionTitle: {
-    color: "#1D293F",
-    fontWeight: "800",
-    fontSize: 16,
+    color: "#0E1E40",
+    fontWeight: "900",
+    fontSize: 20,
   },
   quickGrid: {
     flexDirection: "row",
     gap: 12,
-
+    justifyContent: "space-between",
   },
   quickTile: {
-    flex: 1,
-    borderRadius: 16,
-    backgroundColor: "#ECF0F4",
-  },
-  quickTileContent: {
-    minHeight: 74,
-    flexDirection: "column",
-  },
-  customRow: {
-    flexDirection: "row",
-    gap: 10,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#DBEAF2",
     alignItems: "center",
+    justifyContent: "center",
+  },
+  quickTileAdd: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#14B2CF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#14B2CF",
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  quickTileLabel: {
+    marginVertical: 0,
+    textAlign: "center",
+    fontWeight: "800",
+    color: "#1BA3C7",
   },
   customInput: {
+    backgroundColor: "#F8FBFE",
+  },
+  modalBackdrop: {
     flex: 1,
-    backgroundColor: "#EDF1F5",
+    backgroundColor: "rgba(12, 23, 40, 0.3)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    borderRadius: 20,
+    backgroundColor: "#F5F7F9",
+    borderWidth: 1,
+    borderColor: "#E2EAF1",
+    padding: 16,
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0E1E40",
+  },
+  modalActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
   },
   addButton: {
-    borderRadius: 12,
+    borderRadius: 14,
+    shadowColor: "#14B2CF",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  addButtonContent: {
+    paddingHorizontal: 8,
   },
   logsHeader: {
     flexDirection: "row",
@@ -434,10 +601,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   entriesBadge: {
-    backgroundColor: "#E8EDF2",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
+    backgroundColor: "#E9EEF4",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
   },
   entriesText: {
     color: "#77879A",
@@ -450,12 +617,19 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   logItem: {
-    borderRadius: 16,
-    backgroundColor: "#ECEFF3",
-    padding: 10,
+    borderRadius: 18,
+    backgroundColor: "#F8FBFE",
+    borderWidth: 1,
+    borderColor: "#E2EAF1",
+    padding: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    shadowColor: "#0E1E40",
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   logLeft: {
     flexDirection: "row",
