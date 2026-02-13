@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "241446799463",
+    "project_id": "sht-app-be101",
+    "storage_bucket": "sht-app-be101.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:241446799463:android:1655fbf323f11a97daacc2",
+        "android_client_info": {
+          "package_name": "com.nxyzzmw.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAPC53fT1DMQbbu7Vjl4JcEK-Q5icI1AAc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
