@@ -19,3 +19,8 @@ export const getHydrationScoreAnalytics = async () => {
   const res = await api.get("/analytics/hydration");
   return res.data;
 };
+
+export const getExport =async ()=>{
+  const res =await api.get("/analytics/export");
+  return res.data
+}

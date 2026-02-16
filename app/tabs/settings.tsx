@@ -154,7 +154,7 @@ paused: Boolean(backend.paused),
   try {
     setSaving(true);
 
-    // ✅ STEP 1 — get latest DB state
+    //  STEP 1 — get latest DB state
     const dbReminder = await getReminder();
 
     const interval = Number(settings.intervalMinutes);
@@ -169,7 +169,7 @@ paused: Boolean(backend.paused),
       return;
     }
 
-    // ✅ STEP 2 — update main reminder if changed
+    // STEP 2 — update main reminder if changed
     if (
       interval !== dbReminder.interval ||
       settings.startTime !== dbReminder.startTime ||
@@ -417,7 +417,11 @@ const styles = StyleSheet.create({
   headerSaveBtn: { borderRadius: 14 },
   headerSaveBtnContent: { minHeight: 40, paddingHorizontal: 4 },
   headerSaveBtnLabel: { fontWeight: "800", fontSize: 13 },
-  card: { backgroundColor: "#F5F7F9", borderRadius: 28, borderWidth: 1, borderColor: "#E2EAF1", padding: 18, gap: 14 },
+  card: {  shadowColor: "#0E1E40",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,backgroundColor: "#F5F7F9", borderRadius: 28, borderWidth: 1, borderColor: "#E2EAF1", padding: 18, gap: 14 },
   sectionHeading: { flexDirection: "row", alignItems: "center", gap: 10 },
   sectionTitle: { fontSize: 20, fontWeight: "900", color: "#0E1E40" },
   accountRow: { minHeight: 76, borderRadius: 22, borderWidth: 1, borderColor: "#E2EAF1", backgroundColor: "#F5F7F9", paddingHorizontal: 22, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

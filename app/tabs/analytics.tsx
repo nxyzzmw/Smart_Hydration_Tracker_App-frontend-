@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Dimensions
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -17,6 +18,8 @@ import {
   normalizeUnit,
   roundVolume,
 } from "../../src/utils/units";
+import { BarChart } from "react-native-gifted-charts";
+import { ProgressChart } from "react-native-chart-kit";
 
 const WEEK_DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const RING_SEGMENTS = 48;
@@ -134,6 +137,15 @@ export default function Analytics() {
     todayGoalMl > 0
       ? Math.max(0, Math.min(100, Math.round((todayIntakeMl / todayGoalMl) * 100)))
       : 0;
+const chartWidth = Dimensions.get("window").width - 100;
+const progressData = {
+  labels: [],
+  data: [
+    todayGoalMl > 0
+      ? todayCompletionPct / 100
+      : 0,
+  ],
+};
 
   return (
     <Screen>
@@ -261,49 +273,80 @@ export default function Analytics() {
             </Text>
           </View>
         </View>
+<View style={styles.card}>
 
-        <View style={styles.card}>
-          <View style={styles.sectionHeading}>
-            <Ionicons
-              name="bar-chart-outline"
-              size={17}
-              color="#22B9C7"
-            />
-            <Text style={styles.sectionTitle}>Weekly bar graph</Text>
-          </View>
-          <View style={styles.weekChartWrap}>
-            <View style={styles.weekScaleCol}>
-              <Text style={styles.weekScaleText}>100%</Text>
-              <Text style={styles.weekScaleText}>50%</Text>
-              <Text style={styles.weekScaleText}>0%</Text>
-            </View>
-            <View style={styles.weekChart}>
-              {weeklyForChart.map((day, idx) => (
-                <View
-                  key={`week-${day.date || idx}`}
-                  style={styles.weekCol}
-                >
-                  <View style={styles.weekBarTrack}>
-                    <View
-                      style={[
-                        styles.weekBarFill,
-                        {
-                          height: `${Math.max(
-                            0,
-                            Math.min(100, day.completionPct)
-                          )}%`,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.axisLabel}>
-                    {formatWeekLabel(day.date, idx)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
+  {/* Heading stays same */}
+  <View style={styles.sectionHeading}>
+    <Ionicons
+      name="bar-chart-outline"
+      size={17}
+      color="#22B9C7"
+    />
+    <Text style={styles.sectionTitle}>
+      Weekly bar graph
+    </Text>
+  </View>
+
+
+  {/* Chart row container stays same */}
+  <View style={styles.weekChartWrap}>
+
+  {/* Left scale */}
+  <View style={styles.weekScaleCol}>
+    <Text style={styles.weekScaleText}>100%</Text>
+    <Text style={styles.weekScaleText}>50%</Text>
+    <Text style={styles.weekScaleText}>0%</Text>
+  </View>
+
+
+  {/* Chart container FIXED */}
+  <View style={{ flex: 1, marginLeft: 10 }}>
+
+    <BarChart
+  width={chartWidth}
+
+      data={weeklyForChart.map((day, idx) => ({
+        value: Math.max(0, Math.min(100, day.completionPct)),
+        label: formatWeekLabel(day.date, idx),
+        frontColor: "#14B2CF",
+      }))}
+
+      height={142}
+
+      maxValue={100}
+
+      noOfSections={2}
+
+      barWidth={12}
+
+      spacing={18}
+
+      initialSpacing={10}
+
+      roundedTop
+
+      hideRules
+
+      hideYAxisText
+
+      yAxisThickness={0}
+
+      xAxisThickness={0}
+
+      xAxisLabelTextStyle={styles.axisLabel}
+
+      
+
+    />
+
+  </View>
+
+</View>
+
+
+
+</View>
+
 
         <View style={styles.card}>
           <View style={styles.sectionHeading}>
