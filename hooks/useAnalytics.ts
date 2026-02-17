@@ -48,6 +48,22 @@ function clampPct(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function toLocalDayKey(input?: string | Date) {
+  if (!input) return "";
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  ).toDateString();
+}
+
+function isTodayLocalDate(input?: string | Date) {
+  if (!input) return false;
+  return toLocalDayKey(input) === toLocalDayKey(new Date());
+}
+
 function normalizePoint(raw: RawPoint): AnalyticsPoint {
   const amountMl = toNumber(
     raw.amountMl ??
@@ -140,14 +156,26 @@ function extractHydration(payload: any) {
 
 function extractDailyFromWater(payload: any) {
   const logs = extractArrayData(payload);
-  const totalFromLogs = logs.reduce((sum, raw) => {
-    const amount = toNumber(
-      raw?.amountMl ?? raw?.amount ?? raw?.intakeMl
-    );
+  const todayLogs = logs.filter((raw) =>
+    isTodayLocalDate(
+      raw?.timestamp ??
+        raw?.createdAt ??
+        raw?.date ??
+        raw?.day
+    )
+  );
+  const totalFromTodayLogs = todayLogs.reduce((sum, raw) => {
+    const amount = toNumber(raw?.amountMl ?? raw?.amount ?? raw?.intakeMl);
     return sum + amount;
   }, 0);
 
-  const amountMl = toNumber(
+  const payloadDate =
+    payload?.date ??
+    payload?.day ??
+    payload?.data?.date ??
+    payload?.data?.day;
+  const payloadIsToday = isTodayLocalDate(payloadDate);
+  const payloadAmount = toNumber(
     payload?.amountMl ??
       payload?.amount ??
       payload?.intakeMl ??
@@ -155,9 +183,15 @@ function extractDailyFromWater(payload: any) {
       payload?.totalMl ??
       payload?.data?.amountMl ??
       payload?.data?.amount ??
-      payload?.data?.total ??
-      totalFromLogs
+      payload?.data?.total
   );
+
+  const amountMl =
+    totalFromTodayLogs > 0
+      ? totalFromTodayLogs
+      : payloadIsToday
+        ? payloadAmount
+        : 0;
   const goalMl = toNumber(
     payload?.goalMl ??
       payload?.targetMl ??
@@ -168,15 +202,7 @@ function extractDailyFromWater(payload: any) {
       payload?.data?.goal ??
       payload?.data?.dailyGoal
   );
-  const completionPct = clampPct(
-    toNumber(
-      payload?.completionPct ??
-        payload?.dailyCompletionPct ??
-        payload?.completion ??
-        payload?.percentage ??
-        payload?.data?.completionPct
-    ) || (goalMl > 0 ? (amountMl / goalMl) * 100 : 0)
-  );
+  const completionPct = clampPct(goalMl > 0 ? (amountMl / goalMl) * 100 : 0);
 
   return { amountMl, goalMl, completionPct };
 }
@@ -220,26 +246,30 @@ export function useAnalytics() {
       const hydration = extractHydration(scorePayload);
       weekly = applyGoalFallback(weekly, hydration.dailyGoal);
       monthly = applyGoalFallback(monthly, hydration.dailyGoal);
-      const performancePct =
-        hydration.score || computePerformance(weekly, scorePayload);
       const daily = extractDailyFromWater(dailyPayload);
-
-      const today = weekly[weekly.length - 1];
+      const today = weekly.find((item) => isTodayLocalDate(item.date));
+      const todayIntakeMl = daily.amountMl || today?.amountMl || 0;
+      const todayGoalMl =
+        daily.goalMl || hydration.dailyGoal || today?.goalMl || 0;
+      const todayCompletionPct =
+        todayGoalMl > 0
+          ? clampPct((todayIntakeMl / todayGoalMl) * 100)
+          : 0;
+      const performancePct =
+        todayIntakeMl > 0
+          ? hydration.score ||
+            todayCompletionPct ||
+            computePerformance(weekly, scorePayload)
+          : 0;
 
       setState({
         weekly,
         monthly,
         streakDays,
         performancePct,
-        todayCompletionPct:
-          daily.completionPct ||
-          hydration.percentage ||
-          today?.completionPct ||
-          0,
-        todayIntakeMl:
-          daily.amountMl || hydration.todayTotal || today?.amountMl || 0,
-        todayGoalMl:
-          daily.goalMl || hydration.dailyGoal || today?.goalMl || 0,
+        todayCompletionPct,
+        todayIntakeMl,
+        todayGoalMl,
       });
     } catch (fetchError) {
       console.log("Analytics fetch error:", fetchError);

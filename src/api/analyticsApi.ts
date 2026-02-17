@@ -20,7 +20,25 @@ export const getHydrationScoreAnalytics = async () => {
   return res.data;
 };
 
-export const getExport =async ()=>{
-  const res =await api.get("/analytics/export");
-  return res.data
-}
+export type ExportFormat = "json" | "pdf";
+
+type ExportParams = {
+  start?: string;
+  end?: string;
+};
+
+export const getExport = async (
+  format: ExportFormat,
+  params?: ExportParams
+) => {
+  const res = await api.get("/analytics/export", {
+    params: {
+      format,
+      ...(params?.start ? { start: params.start } : {}),
+      ...(params?.end ? { end: params.end } : {}),
+    },
+    responseType: format === "pdf" ? "arraybuffer" : "json",
+  });
+
+  return res;
+};
