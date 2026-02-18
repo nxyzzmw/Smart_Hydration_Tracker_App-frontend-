@@ -25,6 +25,7 @@ import {
   pauseReminder,
   toggleSleepMode,
 } from "../../src/api/reminderApi";
+import { clearAuthTokens } from "../../src/api/axiosClient";
 
 const REMINDER_SETTINGS_KEY = "reminder_settings_v1";
 
@@ -39,7 +40,7 @@ type ReminderSettings = {
 
 const defaultSettings: ReminderSettings = {
   intervalMinutes: "60",
-  startTime: "08:00",
+  startTime: "01:00",
   endTime: "22:00",
   paused: false,
   sleepMode: false,
@@ -107,7 +108,7 @@ useEffect(() => {
       if (backend) {
         const mapped: ReminderSettings = {
           intervalMinutes: String(backend.interval ?? "60"),
-          startTime: backend.startTime ?? "08:00",
+          startTime: backend.startTime ?? "01:00",
           endTime: backend.endTime ?? "22:00",
 paused: Boolean(backend.paused),
           sleepMode: !!backend.sleepMode,
@@ -245,7 +246,7 @@ paused: Boolean(backend.paused),
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem("auth_token");
+      await clearAuthTokens();
       router.replace("/auth/login");
     } catch (error) {
       Alert.alert("Error", "Logout failed"+error);
@@ -346,7 +347,7 @@ paused: Boolean(backend.paused),
                 value={settings.startTime}
                 onChangeText={(v) => setSettings((prev) => ({ ...prev, startTime: v }))}
                 style={[styles.input, styles.halfInput]}
-                placeholder="08:00"
+                placeholder="01:00"
               />
             </View>
             <View style={styles.halfInputWrap}>

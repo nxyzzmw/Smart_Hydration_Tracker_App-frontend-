@@ -2,6 +2,10 @@ import React, { useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import {
+  ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+} from "../src/api/axiosClient";
 
 export default function Splash() {
   const router = useRouter();
@@ -11,13 +15,16 @@ export default function Splash() {
 
     const checkAuth = async () => {
       try {
-        const token = await AsyncStorage.getItem("auth_token");
+        const [token, refreshToken] = await AsyncStorage.multiGet([
+          ACCESS_TOKEN_KEY,
+          REFRESH_TOKEN_KEY,
+        ]);
 
         // Small delay for splash animation feel
         setTimeout(() => {
           if (!mounted) return;
 
-          if (token) {
+          if (token?.[1] || refreshToken?.[1]) {
             router.replace("/tabs");
           } else {
             router.replace("/auth/login");

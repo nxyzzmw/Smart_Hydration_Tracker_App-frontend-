@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View, Alert, Text } from "react-native";
 import Screen from "../../components/Screen";
 import {
@@ -8,21 +8,21 @@ import {
   SegmentedButtons,
 } from "react-native-paper";
 import { useRouter } from "expo-router";
-import { registerUser, loginUser } from "../../src/api/authApi";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  registerUser,
+  loginUser,
+  getUserTypeOptions,
+} from "../../src/api/authApi";
+import { saveAuthTokens } from "../../src/api/axiosClient";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
+import {
+  DEFAULT_USER_TYPES,
+  inferUserTypeFromProfile,
+  applyUserTypePreset,
+  calculateDailyGoalMl,
+} from "../../src/utils/userTypes";
 
 type Step = 1 | 2 | 3;
-
-const PROFILE_PRESETS = [
-  { key: "athlete", label: "Athlete" },
-  { key: "office_worker", label: "Office worker" },
-  { key: "outdoor_worker", label: "Outdoor worker" },
-  { key: "pregnant", label: "Pregnant" },
-  { key: "senior_citizen", label: "Senior citizen" },
-] as const;
-
-type ProfilePreset = (typeof PROFILE_PRESETS)[number]["key"];
 
 const segmentTheme = {
   colors: {
@@ -45,48 +45,29 @@ export default function Register() {
   const [height, setHeight] = useState("");
   const [activity, setActivity] = useState("moderate");
   const [climate, setClimate] = useState("moderate");
-  const [pregnancy, setPregnancy] = useState(false);
   const [unit, setUnit] = useState("ml");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
-  const [selectedPreset, setSelectedPreset] = useState<ProfilePreset | null>(
-    null
-  );
+  const [userTypes, setUserTypes] = useState<string[]>([...DEFAULT_USER_TYPES]);
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
 
-  const applyPreset = (preset: ProfilePreset) => {
+  useEffect(() => {
+    const loadUserTypes = async () => {
+      const options = await getUserTypeOptions();
+      if (options.length > 0) setUserTypes(options);
+    };
+    loadUserTypes();
+  }, []);
+
+  const applyPreset = (preset: string) => {
+    const next = applyUserTypePreset(
+      { age, activity, climate },
+      preset
+    );
     setSelectedPreset(preset);
-
-    if (preset === "athlete") {
-      setActivity("high");
-      setClimate("moderate");
-      setPregnancy(false);
-      return;
-    }
-    if (preset === "office_worker") {
-      setActivity("low");
-      setClimate("moderate");
-      setPregnancy(false);
-      return;
-    }
-    if (preset === "outdoor_worker") {
-      setActivity("high");
-      setClimate("hot");
-      setPregnancy(false);
-      return;
-    }
-    if (preset === "pregnant") {
-      setActivity("moderate");
-      setClimate("moderate");
-      setPregnancy(true);
-      return;
-    }
-
-    setActivity("low");
-    setClimate("moderate");
-    setPregnancy(false);
-    if (!age || Number(age) < 60) {
-      setAge("60");
-    }
+    setAge(String(next.age ?? age));
+    setActivity(next.activity ?? activity);
+    setClimate(next.climate ?? climate);
   };
 
   const clearFieldError = (field: string) => {
@@ -136,6 +117,16 @@ export default function Register() {
 
   const handleRegister = async () => {
     if (!validateAll()) return;
+    const userType =
+      selectedPreset ||
+      inferUserTypeFromProfile({ age, activity, climate });
+    const dailyGoal = calculateDailyGoalMl({
+      weight: Number(weight),
+      gender,
+      activity,
+      climate,
+      userType,
+    });
 
     const userData = {
       name,
@@ -147,7 +138,8 @@ export default function Register() {
       height: Number(height),
       activity,
       climate,
-      pregnancy,
+      userType,
+      dailyGoal,
       unit,
     };
 
@@ -157,11 +149,16 @@ export default function Register() {
       const loginResult = await loginUser(email, password);
 
       const accessToken = loginResult.access_token || loginResult?.data?.access_token;
+      const refreshToken =
+        loginResult.refresh_token ||
+        loginResult.refreshToken ||
+        loginResult?.data?.refresh_token ||
+        loginResult?.data?.refreshToken;
       if (!accessToken) {
         throw new Error("Invalid token response from server");
       }
 
-      await AsyncStorage.setItem("auth_token", accessToken);
+      await saveAuthTokens(accessToken, refreshToken);
       router.replace("/tabs");
     } catch (error: any) {
       Alert.alert(
@@ -314,7 +311,7 @@ export default function Register() {
                     <Text>Female</Text>
                   </View>
                   <View style={styles.genderItem}>
-                    <RadioButton value="other" color="#14B2CF" />
+                    <RadioButton value="others" color="#14B2CF" />
                     <Text>Other</Text>
                   </View>
                 </View>
@@ -326,19 +323,19 @@ export default function Register() {
             <View style={styles.formBlock}>
               <Text style={styles.label}>Custom Profile</Text>
               <View style={styles.presetWrap}>
-                {PROFILE_PRESETS.map((preset) => {
-                  const isActive = selectedPreset === preset.key;
+                {userTypes.map((preset) => {
+                  const isActive = selectedPreset === preset;
                   return (
                     <Button
-                      key={preset.key}
+                      key={preset}
                       mode={isActive ? "contained" : "outlined"}
                       compact
-                      onPress={() => applyPreset(preset.key)}
+                      onPress={() => applyPreset(preset)}
                       style={styles.presetBtn}
                       buttonColor={isActive ? "#14B2CF" : "#E9EEF4"}
                       textColor={isActive ? "#FFFFFF" : "#4E6780"}
                     >
-                      {preset.label}
+                      {preset}
                     </Button>
                   );
                 })}

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearAuthTokens } from "../src/api/axiosClient";
 
 type HeaderProps = {
   title?: string;
@@ -32,7 +32,7 @@ export default function Header({
     try {
       setLoggingOut(true);
 
-      await AsyncStorage.removeItem("auth_token");
+      await clearAuthTokens();
 
       router.replace("/auth/login");
 

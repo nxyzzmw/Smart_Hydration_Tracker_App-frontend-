@@ -14,21 +14,18 @@ import {
   RadioButton,
   SegmentedButtons,
 } from "react-native-paper";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import { useProfile } from "../hooks/useProfile";
-
-const PROFILE_PRESETS = [
-  { key: "athlete", label: "Athlete" },
-  { key: "office_worker", label: "Office worker" },
-  { key: "outdoor_worker", label: "Outdoor worker" },
-  { key: "pregnant", label: "Pregnant" },
-  { key: "senior_citizen", label: "Senior citizen" },
-] as const;
-
-type ProfilePreset = (typeof PROFILE_PRESETS)[number]["key"];
+import { clearAuthTokens } from "../src/api/axiosClient";
+import { getUserTypeOptions } from "../src/api/authApi";
+import {
+  DEFAULT_USER_TYPES,
+  inferUserTypeFromProfile,
+  applyUserTypePreset,
+  calculateDailyGoalMl,
+} from "../src/utils/userTypes";
 
 const segmentTheme = {
   colors: {
@@ -37,54 +34,6 @@ const segmentTheme = {
     outline: "#93BDD1",
   },
 };
-
-function detectPreset(form: any): ProfilePreset | null {
-  if (!form) return null;
-  const age = Number(form.age);
-
-  if (form.pregnancy) return "pregnant";
-  if (age >= 60) return "senior_citizen";
-  if (form.activity === "high" && form.climate === "moderate") return "athlete";
-  if (form.activity === "high" && form.climate === "hot") return "outdoor_worker";
-  if (form.activity === "low" && form.climate === "moderate") return "office_worker";
-
-  return null;
-}
-
-function applyPreset(form: any, preset: ProfilePreset) {
-  const next = { ...form };
-
-  if (preset === "athlete") {
-    next.activity = "high";
-    next.climate = "moderate";
-    next.pregnancy = false;
-  }
-  if (preset === "office_worker") {
-    next.activity = "low";
-    next.climate = "moderate";
-    next.pregnancy = false;
-  }
-  if (preset === "outdoor_worker") {
-    next.activity = "high";
-    next.climate = "hot";
-    next.pregnancy = false;
-  }
-  if (preset === "pregnant") {
-    next.activity = "moderate";
-    next.climate = "moderate";
-    next.pregnancy = true;
-  }
-  if (preset === "senior_citizen") {
-    next.activity = "low";
-    next.climate = "moderate";
-    next.pregnancy = false;
-    if (!next.age || Number(next.age) < 60) {
-      next.age = "60";
-    }
-  }
-
-  return next;
-}
 
 function displayText(value: any) {
   if (value === null || value === undefined || value === "") {
@@ -119,14 +68,24 @@ export default function Profile() {
   const [form, setForm] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [userTypes, setUserTypes] = useState<string[]>([...DEFAULT_USER_TYPES]);
 
   useEffect(() => {
-    if (profile) setForm(profile);
+    if (!profile) return;
+    setForm({ ...profile, userType: inferUserTypeFromProfile(profile) });
   }, [profile]);
+
+  useEffect(() => {
+    const loadUserTypes = async () => {
+      const options = await getUserTypeOptions();
+      if (options.length > 0) setUserTypes(options);
+    };
+    loadUserTypes();
+  }, []);
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem("auth_token");
+      await clearAuthTokens();
       router.replace("/auth/login");
     } catch (error) {
       console.log("Logout error:", error);
@@ -137,15 +96,29 @@ export default function Profile() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await updateProfile({
-        ...form,
+      const payload = { ...form };
+      delete payload.pregnancy;
+      const normalizedUserType =
+        form.userType || inferUserTypeFromProfile(form);
+      const dailyGoal = calculateDailyGoalMl({
+        ...payload,
+        userType: normalizedUserType,
+      });
+
+      const updated = await updateProfile({
+        ...payload,
         age: Number(form.age),
         weight: Number(form.weight),
         height: Number(form.height),
         gender: form.gender,
         activity: form.activity,
         climate: form.climate,
+        userType: normalizedUserType,
+        dailyGoal,
       });
+      if (updated) {
+        setForm({ ...updated, userType: inferUserTypeFromProfile(updated) });
+      }
       setIsEditing(false);
     } catch (error) {
       console.log("Update error:", error);
@@ -156,7 +129,7 @@ export default function Profile() {
   };
 
   const handleCancel = () => {
-    setForm(profile);
+    setForm({ ...profile, userType: inferUserTypeFromProfile(profile) });
     setIsEditing(false);
   };
 
@@ -171,7 +144,7 @@ export default function Profile() {
   }
 
   const initial = (form.name || "U").charAt(0).toUpperCase();
-  const selectedPreset = detectPreset(form);
+  const selectedPreset = form.userType || inferUserTypeFromProfile(form);
 
   return (
     <Screen>
@@ -232,17 +205,14 @@ export default function Profile() {
 
               <InfoRow
                 label="Profile preset"
-                value={
-                  selectedPreset
-                    ? displayText(
-                        PROFILE_PRESETS.find((p) => p.key === selectedPreset)?.label
-                      )
-                    : "Custom"
-                }
+                value={displayText(selectedPreset)}
+              />
+              <InfoRow
+                label="Daily goal (ml)"
+                value={displayText(form.dailyGoal)}
               />
               <InfoRow label="Activity" value={displayText(form.activity)} />
               <InfoRow label="Climate" value={displayText(form.climate)} />
-              <InfoRow label="Pregnancy" value={displayText(form.pregnancy)} />
               <InfoRow label="Unit" value={displayText(form.unit)} noBorder />
             </View>
 
@@ -284,17 +254,17 @@ export default function Profile() {
 
             <Text style={styles.label}>Custom Profile</Text>
             <View style={styles.presetWrap}>
-              {PROFILE_PRESETS.map((preset) => {
-                const isActive = selectedPreset === preset.key;
+              {userTypes.map((preset) => {
+                const isActive = selectedPreset === preset;
                 return (
                   <Pressable
-                    key={preset.key}
+                    key={preset}
                     style={[
                       styles.presetChip,
                       isActive && styles.presetChipActive,
                     ]}
                     onPress={() =>
-                      setForm((prev: any) => applyPreset(prev, preset.key))
+                      setForm((prev: any) => applyUserTypePreset(prev, preset))
                     }
                   >
                     <Text
@@ -303,7 +273,7 @@ export default function Profile() {
                         isActive && styles.presetChipTextActive,
                       ]}
                     >
-                      {preset.label}
+                      {preset}
                     </Text>
                   </Pressable>
                 );
@@ -325,7 +295,7 @@ export default function Profile() {
                   <Text>Female</Text>
                 </View>
                 <View style={styles.genderItem}>
-                  <RadioButton value="other" color="#14B2CF" />
+                  <RadioButton value="others" color="#14B2CF" />
                   <Text>Other</Text>
                 </View>
               </View>

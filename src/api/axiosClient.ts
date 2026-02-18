@@ -33,9 +33,45 @@ export const api = axios.create({
   timeout: 10000,
 });
 
+export const ACCESS_TOKEN_KEY = "auth_token";
+export const REFRESH_TOKEN_KEY = "refresh_token";
+
+function extractTokens(payload: any) {
+  const accessToken =
+    payload?.access_token ??
+    payload?.accessToken ??
+    payload?.token ??
+    payload?.data?.access_token ??
+    payload?.data?.accessToken;
+  const refreshToken =
+    payload?.refresh_token ??
+    payload?.refreshToken ??
+    payload?.data?.refresh_token ??
+    payload?.data?.refreshToken;
+
+  return {
+    accessToken: typeof accessToken === "string" ? accessToken : "",
+    refreshToken: typeof refreshToken === "string" ? refreshToken : "",
+  };
+}
+
+export async function saveAuthTokens(
+  accessToken: string,
+  refreshToken?: string
+) {
+  await AsyncStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  if (refreshToken) {
+    await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  }
+}
+
+export async function clearAuthTokens() {
+  await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]);
+}
+
 // ================= REQUEST INTERCEPTOR =================
 api.interceptors.request.use(async (config) => {
-    const token = await AsyncStorage.getItem("auth_token");
+    const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
 
     if (token) {
       config.headers = config.headers || {};
@@ -63,26 +99,38 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    if (originalRequest._retry || String(originalRequest.url || "").includes("/api/auth/refresh")) {
+      return Promise.reject(error);
+    }
+
     originalRequest._retry = true;
 
     try {
+      const refreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+      if (!refreshToken) {
+        throw new Error("No refresh token available");
+      }
+
       const res = await axios.post(
         `${API_BASE_URL}/api/auth/refresh`,
-        undefined,
-        { withCredentials: true }
+        {
+          refresh_token: refreshToken,
+          refreshToken,
+        }
       );
 
-      const newAccessToken = res.data.access_token;
-      if (!newAccessToken) {
+      const { accessToken, refreshToken: nextRefreshToken } = extractTokens(res.data);
+      if (!accessToken) {
         throw new Error("No access token from refresh");
       }
 
-      await AsyncStorage.setItem("auth_token", newAccessToken);
+      await saveAuthTokens(accessToken, nextRefreshToken || refreshToken);
 
       originalRequest.headers = originalRequest.headers || {};
-      originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
       return api(originalRequest);
     } catch (refreshError) {
+      await clearAuthTokens();
       return Promise.reject(refreshError);
     }
   }

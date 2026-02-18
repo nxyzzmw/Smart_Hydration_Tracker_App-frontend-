@@ -12,7 +12,7 @@
       "bundleIdentifier": "com.nxyzzmw.myapp"
     },
     "android": {
-"googleServicesFile": "./google-services.json",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE"
       },
@@ -27,14 +27,18 @@
       "expo-router",
       [
         "expo-splash-screen"
-        
       ],
       "@react-native-firebase/app"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5c9fdda9-c2c2-461f-a402-0a67c68243f0"
+      }
     }
   }
-
 }

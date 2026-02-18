@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { getApp } from "@react-native-firebase/app";
 import {
@@ -11,11 +12,17 @@ import {
 } from "@react-native-firebase/messaging";
 
 import { saveFcmToken } from "../api/userApi";
+import { ACCESS_TOKEN_KEY } from "../api/axiosClient";
 
 /**
  * Modern Firebase messaging instance
  */
 const messaging = getMessaging(getApp());
+
+const hasAuthToken = async (): Promise<boolean> => {
+  const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+  return !!token;
+};
 
 /**
  * Ask notification permission ONLY when user enables toggle
@@ -57,6 +64,10 @@ const requestUserPermission = async (): Promise<boolean> => {
  */
 export const syncFcmTokenToBackend = async (): Promise<boolean> => {
   try {
+    if (!(await hasAuthToken())) {
+      return false;
+    }
+
     const hasPermission = await requestUserPermission();
     if (!hasPermission) return false;
 
@@ -88,6 +99,10 @@ export const Notification = () => {
   useEffect(() => {
     const unsubscribe = onTokenRefresh(messaging, async (token) => {
       try {
+        if (!(await hasAuthToken())) {
+          return;
+        }
+
         if (token) {
           console.log("Token refreshed:", token);
           await saveFcmToken(token);

@@ -10,9 +10,9 @@ import {
 } from "react-native";
 import { TextInput, Button } from "react-native-paper";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Screen from "../../components/Screen";
 import { loginUser } from "../../src/api/authApi";
+import { saveAuthTokens } from "../../src/api/axiosClient";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 
 export default function Login() {
@@ -41,11 +41,16 @@ export default function Login() {
       const result = await loginUser(email, password);
 
       const accessToken = result.access_token || result?.data?.access_token;
+      const refreshToken =
+        result.refresh_token ||
+        result.refreshToken ||
+        result?.data?.refresh_token ||
+        result?.data?.refreshToken;
       if (!accessToken) {
         throw new Error("Backend did not return tokens correctly");
       }
 
-      await AsyncStorage.setItem("auth_token", accessToken);
+      await saveAuthTokens(accessToken, refreshToken);
       router.replace("/tabs");
     } catch (e: any) {
       Alert.alert(

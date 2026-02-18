@@ -1,5 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+} from "../src/api/axiosClient";
 
 export function useAuth() {
   const [loading, setLoading] = useState(true);
@@ -7,10 +11,12 @@ export function useAuth() {
 
   const checkAuth = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem("auth_token");
+      const [token, refreshToken] = await AsyncStorage.multiGet([
+        ACCESS_TOKEN_KEY,
+        REFRESH_TOKEN_KEY,
+      ]);
 
-      // Only trust access token
-      setAuthenticated(!!token);
+      setAuthenticated(Boolean(token?.[1] || refreshToken?.[1]));
 
     } catch (error) {
       console.log("Auth check error:", error);

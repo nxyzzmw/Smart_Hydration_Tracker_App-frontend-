@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { AppState } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   getUserProfile,
   updateUserProfile,
@@ -7,6 +9,20 @@ import {
   emitProfileChanged,
   subscribeProfileChanged,
 } from "../src/events/profileEvents";
+
+function extractProfile(payload: any) {
+  if (!payload || typeof payload !== "object") return null;
+  if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
+    return payload.data;
+  }
+  if (payload.profile && typeof payload.profile === "object") {
+    return payload.profile;
+  }
+  if (payload.user && typeof payload.user === "object") {
+    return payload.user;
+  }
+  return payload;
+}
 
 export function useProfile() {
   const [profile, setProfile] = useState<any>(null);
@@ -23,14 +39,17 @@ export function useProfile() {
   }, []);
 
   // ✅ Fetch profile safely
-  const fetchProfile = useCallback(async () => {
+  const fetchProfile = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError(null);
 
-      const data = await getUserProfile();
+      const payload = await getUserProfile();
+      const data = extractProfile(payload);
 
-      if (mounted.current) {
+      if (mounted.current && data) {
         setProfile(data);
       }
 
@@ -42,7 +61,7 @@ export function useProfile() {
       }
 
     } finally {
-      if (mounted.current) {
+      if (mounted.current && !silent) {
         setLoading(false);
       }
     }
@@ -55,9 +74,27 @@ export function useProfile() {
 
   useEffect(() => {
     const unsubscribe = subscribeProfileChanged(() => {
-      fetchProfile();
+      fetchProfile(true);
     });
     return unsubscribe;
+  }, [fetchProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfile(true);
+    }, [fetchProfile])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        fetchProfile(true);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [fetchProfile]);
 
   // ✅ Update profile safely
@@ -66,10 +103,16 @@ export function useProfile() {
       setSaving(true);
       setError(null);
 
-      await updateUserProfile(data);
-      const updated = await getUserProfile();
+      const updatePayload = await updateUserProfile(data);
+      const immediate = extractProfile(updatePayload);
+      if (mounted.current && immediate) {
+        setProfile(immediate);
+      }
 
-      if (mounted.current) {
+      const latestPayload = await getUserProfile();
+      const updated = extractProfile(latestPayload);
+
+      if (mounted.current && updated) {
         setProfile(updated);
       }
       emitProfileChanged();

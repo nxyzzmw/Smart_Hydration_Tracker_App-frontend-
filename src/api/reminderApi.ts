@@ -10,7 +10,7 @@ export const createReminder = async () => {
   try {
     const res = await api.post("/reminder", {
       interval: 60,
-      startTime: "08:00",
+      startTime: "01:00",
       endTime: "22:00",
     });
     return res.data;
