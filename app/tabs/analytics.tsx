@@ -1,6 +1,7 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Screen from "../../components/Screen";
 import TabHeader from "../../components/TabHeader";
+import LoadingAnimation from "../../components/LoadingAnimation";
 import { useAnalytics } from "../../hooks/useAnalytics";
 import { useProfile } from "../../hooks/useProfile";
 import {
@@ -19,7 +21,6 @@ import {
   roundVolume,
 } from "../../src/utils/units";
 import { BarChart } from "react-native-gifted-charts";
-import { ProgressChart } from "react-native-chart-kit";
 
 const WEEK_DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const RING_SEGMENTS = 48;
@@ -52,6 +53,14 @@ function startOfUtcDay(date: Date) {
   );
 }
 
+function startOfUtcWeek(date: Date) {
+  const day = startOfUtcDay(date);
+  const dayOfWeek = day.getUTCDay();
+  const weekStart = new Date(day);
+  weekStart.setUTCDate(day.getUTCDate() - dayOfWeek);
+  return weekStart;
+}
+
 function toDayKey(date: Date | string) {
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "";
@@ -72,22 +81,49 @@ export default function Analytics() {
     todayIntakeMl,
     todayGoalMl,
   } = useAnalytics();
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [monthModalVisible, setMonthModalVisible] = useState(false);
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState<number | null>(null);
+  const [selectedMonthYear, setSelectedMonthYear] = useState<number>(
+    new Date().getUTCFullYear()
+  );
+
+  const dailyAnalyticsMap = useMemo(() => {
+    const merged = [...monthly, ...weekly];
+    const map = new Map<string, { date: string; amountMl: number; goalMl: number; completionPct: number }>();
+    merged.forEach((item) => {
+      const key = toDayKey(item.date);
+      if (!key) return;
+      map.set(key, item);
+    });
+    return map;
+  }, [monthly, weekly]);
+
+  const maxPreviousWeeks = useMemo(() => {
+    if (dailyAnalyticsMap.size === 0) return 0;
+    const keys = Array.from(dailyAnalyticsMap.keys()).sort();
+    const first = keys[0] ? new Date(keys[0]) : null;
+    if (!first || Number.isNaN(first.getTime())) return 0;
+
+    const firstWeekStart = startOfUtcWeek(first);
+    const currentWeekStart = startOfUtcWeek(new Date());
+    const diffMs = currentWeekStart.getTime() - firstWeekStart.getTime();
+    if (diffMs <= 0) return 0;
+    return Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+  }, [dailyAnalyticsMap]);
 
   const weeklyForChart = useMemo(() => {
-    const today = startOfUtcDay(new Date());
-    const dayOfWeek = today.getUTCDay();
-    const weekStart = new Date(today);
-    weekStart.setUTCDate(today.getUTCDate() - dayOfWeek);
-
-    const map = new Map(weekly.map((item) => [toDayKey(item.date), item]));
+    const currentWeekStart = startOfUtcWeek(new Date());
+    const targetWeekStart = new Date(currentWeekStart);
+    targetWeekStart.setUTCDate(currentWeekStart.getUTCDate() - weekOffset * 7);
 
     return Array.from({ length: 7 }).map((_, idx) => {
-      const date = new Date(weekStart);
-      date.setUTCDate(weekStart.getUTCDate() + idx);
+      const date = new Date(targetWeekStart);
+      date.setUTCDate(targetWeekStart.getUTCDate() + idx);
       const key = toDayKey(date);
 
       return (
-        map.get(key) || {
+        dailyAnalyticsMap.get(key) || {
           date: key,
           amountMl: 0,
           goalMl: 0,
@@ -95,7 +131,18 @@ export default function Analytics() {
         }
       );
     });
-  }, [weekly]);
+  }, [dailyAnalyticsMap, weekOffset]);
+
+  const weekRangeLabel = useMemo(() => {
+    if (weeklyForChart.length === 0) return "";
+    const start = new Date(weeklyForChart[0].date);
+    const end = new Date(weeklyForChart[6].date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "";
+
+    const startText = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const endText = end.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return `${startText} - ${endText}`;
+  }, [weeklyForChart]);
 
   const yearlyConsistency = useMemo(() => {
     const monthBuckets = Array.from({ length: 12 }).map(() => ({
@@ -120,6 +167,70 @@ export default function Analytics() {
     }));
   }, [monthly]);
 
+  const dailyCompletionsByMonth = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+
+    monthly.forEach((entry) => {
+      const parsed = new Date(entry.date);
+      if (Number.isNaN(parsed.getTime())) return;
+      const year = parsed.getUTCFullYear();
+      const month = parsed.getUTCMonth();
+      const day = parsed.getUTCDate();
+      const key = `${year}-${month}`;
+
+      if (!map.has(key)) {
+        map.set(key, new Set<number>());
+      }
+      if (entry.completionPct >= 100) {
+        map.get(key)?.add(day);
+      }
+    });
+
+    return map;
+  }, [monthly]);
+
+  const selectedMonthDays = useMemo(() => {
+    if (selectedMonthIdx === null) return [];
+    const daysInMonth = new Date(
+      Date.UTC(selectedMonthYear, selectedMonthIdx + 1, 0)
+    ).getUTCDate();
+    const firstDayOfMonth = new Date(
+      Date.UTC(selectedMonthYear, selectedMonthIdx, 1)
+    ).getUTCDay();
+    const grid: { day: number | null; achieved: boolean }[] = [];
+
+    for (let i = 0; i < firstDayOfMonth; i += 1) {
+      grid.push({ day: null, achieved: false });
+    }
+
+    const achievedDays =
+      dailyCompletionsByMonth.get(`${selectedMonthYear}-${selectedMonthIdx}`) ||
+      new Set<number>();
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      grid.push({ day, achieved: achievedDays.has(day) });
+    }
+
+    while (grid.length % 7 !== 0) {
+      grid.push({ day: null, achieved: false });
+    }
+
+    return grid;
+  }, [selectedMonthIdx, selectedMonthYear, dailyCompletionsByMonth]);
+
+  const openMonthModal = (monthIdx: number) => {
+    const currentYear = new Date().getUTCFullYear();
+    const yearsWithMonth = monthly
+      .map((entry) => new Date(entry.date))
+      .filter((date) => !Number.isNaN(date.getTime()) && date.getUTCMonth() === monthIdx)
+      .map((date) => date.getUTCFullYear())
+      .sort((a, b) => b - a);
+
+    setSelectedMonthIdx(monthIdx);
+    setSelectedMonthYear(yearsWithMonth[0] ?? currentYear);
+    setMonthModalVisible(true);
+  };
+
   const ringFilledSegments = useMemo(() => {
     if (todayGoalMl <= 0) return 0;
     const clamped = Math.max(0, Math.min(100, todayCompletionPct));
@@ -138,25 +249,22 @@ export default function Analytics() {
       ? Math.max(0, Math.min(100, Math.round((todayIntakeMl / todayGoalMl) * 100)))
       : 0;
 const chartWidth = Dimensions.get("window").width - 100;
-const progressData = {
-  labels: [],
-  data: [
-    todayGoalMl > 0
-      ? todayCompletionPct / 100
-      : 0,
-  ],
-};
+const canGoPrevWeek = weekOffset < maxPreviousWeeks;
+const canGoNextWeek = weekOffset > 0;
 
   return (
     <Screen>
-      <TabHeader
-        title="Insights"
-        onProfilePress={() => router.push("/profile")}
-      />
+      <View style={styles.pageHeaderWrap}>
+        <TabHeader
+          title="Insights"
+          onProfilePress={() => router.push("/profile")}
+          style={styles.pageHeader}
+        />
+      </View>
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#14B2CF" />
+          <LoadingAnimation size={96} />
         </View>
       ) : null}
 
@@ -286,6 +394,27 @@ const progressData = {
       Weekly bar graph
     </Text>
   </View>
+  <View style={styles.weekNavRow}>
+    <Pressable
+      onPress={() => canGoPrevWeek && setWeekOffset((prev) => prev + 1)}
+      disabled={!canGoPrevWeek}
+      style={[styles.weekNavBtn, !canGoPrevWeek && styles.weekNavBtnDisabled]}
+    >
+      <Ionicons name="chevron-back" size={16} color={canGoPrevWeek ? "#0A9CF0" : "#9EB2C4"} />
+      <Text style={[styles.weekNavText, !canGoPrevWeek && styles.weekNavTextDisabled]}>Prev week</Text>
+    </Pressable>
+
+    <Text style={styles.weekRangeText}>{weekRangeLabel || "Current week"}</Text>
+
+    <Pressable
+      onPress={() => canGoNextWeek && setWeekOffset((prev) => prev - 1)}
+      disabled={!canGoNextWeek}
+      style={[styles.weekNavBtn, !canGoNextWeek && styles.weekNavBtnDisabled]}
+    >
+      <Text style={[styles.weekNavText, !canGoNextWeek && styles.weekNavTextDisabled]}>Next week</Text>
+      <Ionicons name="chevron-forward" size={16} color={canGoNextWeek ? "#0A9CF0" : "#9EB2C4"} />
+    </Pressable>
+  </View>
 
 
   {/* Chart row container stays same */}
@@ -335,8 +464,6 @@ const progressData = {
 
       xAxisLabelTextStyle={styles.axisLabel}
 
-      
-
     />
 
   </View>
@@ -359,9 +486,10 @@ const progressData = {
           </View>
           <View style={styles.monthGrid}>
             {yearlyConsistency.map((month) => (
-              <View
+              <Pressable
                 key={`month-${month.monthIdx}`}
                 style={styles.monthCellWrap}
+                onPress={() => openMonthModal(month.monthIdx)}
               >
                 <View
                   style={[
@@ -373,12 +501,12 @@ const progressData = {
                 />
                 <Text style={styles.monthLabel}>
                   {new Date(
-                    Date.UTC(2026, month.monthIdx, 1)
+                    Date.UTC(new Date().getUTCFullYear(), month.monthIdx, 1)
                   ).toLocaleString(undefined, {
                     month: "short",
                   })}
                 </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
           <View style={styles.monthLegendRow}>
@@ -391,6 +519,68 @@ const progressData = {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={monthModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMonthModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.monthModalCard}>
+            <View style={styles.monthModalHeader}>
+              <Text style={styles.monthModalTitle}>
+                {selectedMonthIdx === null
+                  ? "Month"
+                  : `${new Date(
+                      Date.UTC(selectedMonthYear, selectedMonthIdx, 1)
+                    ).toLocaleString(undefined, { month: "long" })} ${selectedMonthYear}`}
+              </Text>
+              <Pressable
+                onPress={() => setMonthModalVisible(false)}
+                style={styles.monthModalCloseBtn}
+              >
+                <Ionicons name="close" size={20} color="#4A5D77" />
+              </Pressable>
+            </View>
+
+            <Text style={styles.monthModalHint}>Highlighted dates reached 100% daily goal.</Text>
+
+            <View style={styles.calendarWeekHeader}>
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, idx) => (
+                <Text key={`cal-h-${idx}`} style={styles.calendarWeekText}>
+                  {d}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {selectedMonthDays.map((cell, idx) => (
+                <View
+                  key={`cal-d-${idx}`}
+                  style={styles.calendarCell}
+                >
+                  <View
+                    style={[
+                      styles.calendarCellInner,
+                      cell.achieved && styles.calendarCellInnerAchieved,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.calendarCellText,
+                        cell.achieved && styles.calendarCellTextAchieved,
+                      ]}
+                    >
+                      {cell.day ?? ""}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -402,13 +592,17 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 24,
   },
+  pageHeaderWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingBottom: 4,
+    backgroundColor: "#EAF2F8",
+  },
   pageHeader: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 2,
   },
   pageTitle: {
     fontSize: 23,
@@ -622,6 +816,44 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  weekNavRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: -2,
+    marginBottom: 2,
+    gap: 8,
+  },
+  weekNavBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#EAF4FA",
+    borderWidth: 1,
+    borderColor: "#D6E6F1",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  weekNavBtnDisabled: {
+    backgroundColor: "#F2F6FA",
+    borderColor: "#E2EAF1",
+  },
+  weekNavText: {
+    color: "#0A9CF0",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  weekNavTextDisabled: {
+    color: "#9EB2C4",
+  },
+  weekRangeText: {
+    flex: 1,
+    textAlign: "center",
+    color: "#5B748E",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   weekScaleCol: {
     width: 32,
     height: 142,
@@ -695,6 +927,88 @@ const styles = StyleSheet.create({
     width: 18,
     height: 10,
     borderRadius: 4,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(14, 30, 64, 0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  monthModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#D5DEE8",
+    padding: 16,
+    gap: 12,
+  },
+  monthModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  monthModalTitle: {
+    color: "#0E1E40",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  monthModalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "#D8E2EC",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FBFE",
+  },
+  monthModalHint: {
+    color: "#5B748E",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  calendarWeekHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  calendarWeekText: {
+    width: "14.2%",
+    textAlign: "center",
+    color: "#7D95A8",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 8,
+    justifyContent: "space-between",
+  },
+  calendarCell: {
+    width: "14.2857%",
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarCellInner: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarCellInnerAchieved: {
+    backgroundColor: "#14B2CF",
+  },
+  calendarCellText: {
+    color: "#526D86",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  calendarCellTextAchieved: {
+    color: "#FFFFFF",
+    fontWeight: "800",
   },
   statsRow: {
     flexDirection: "row",

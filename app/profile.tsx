@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
-  ActivityIndicator,
   Alert,
   ScrollView,
   Pressable,
@@ -17,6 +16,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
+import LoadingAnimation from "../components/LoadingAnimation";
 import { useProfile } from "../hooks/useProfile";
 import { clearAuthTokens } from "../src/api/axiosClient";
 import { getUserTypeOptions } from "../src/api/authApi";
@@ -137,7 +137,7 @@ export default function Profile() {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#14B2CF" />
+          <LoadingAnimation size={96} />
         </View>
       </Screen>
     );
@@ -390,12 +390,14 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 20,
     gap: 16,
     paddingBottom: 26,
   },
   pageHeader: {
     marginHorizontal: 16,
+        paddingTop: 20,
+
     marginTop: 10,
     marginBottom: 2,
     flexDirection: "row",

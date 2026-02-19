@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "myApp",
+    "name": "Hydration Tracker",
     "slug": "myApp",
+    "icon": "./assets/images/app-icon.png",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "myapp",
@@ -14,6 +15,7 @@
     "android": {
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/images/app-icon.png",
         "backgroundColor": "#E6F4FE"
       },
       "edgeToEdgeEnabled": true,

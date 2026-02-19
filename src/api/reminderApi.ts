@@ -4,6 +4,7 @@ export type ReminderPayload = {
   interval: number;
   startTime: string;
   endTime: string;
+  notificationMessage?: string;
 };
 
 export const createReminder = async () => {
@@ -40,23 +41,45 @@ export const updateReminder = async (data: ReminderPayload) => {
   }
 };
 
-export const pauseReminder = async (paused: boolean) => {
+const HHMM_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+const toHHmm = (value?: string) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (HHMM_REGEX.test(trimmed)) return trimmed;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const hours = String(parsed.getHours()).padStart(2, "0");
+  const minutes = String(parsed.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
+export const pauseReminder = async (
+  paused: boolean,
+  pauseStartTime?: string,
+  pauseEndTime?: string
+) => {
   try {
-    // FORCE boolean (important)
-    const payload = { paused: Boolean(paused) };
+    const payload: Record<string, unknown> = { paused: Boolean(paused) };
+
+    if (!paused) {
+      payload.pauseStartTime = null;
+      payload.pauseEndTime = null;
+    } else {
+      payload.pauseStartTime = toHHmm(pauseStartTime);
+      payload.pauseEndTime = toHHmm(pauseEndTime);
+    }
 
     const res = await api.put("/reminder/pause", payload);
 
     return res.data;
   } catch (error: any) {
-    console.error(
-      "PAUSE reminder error:",
-      error.response?.data || error.message
-    );
+    console.error("PAUSE reminder error:", error.response?.data || error.message);
     throw error;
   }
 };
-
 
 export const toggleSleepMode = async () => {
   try {

@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -11,16 +10,22 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Button, Chip } from "react-native-paper";
+import { Button } from "react-native-paper";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import Screen from "../../components/Screen";
 import TabHeader from "../../components/TabHeader";
+import LoadingAnimation from "../../components/LoadingAnimation";
 import { useWater } from "../../hooks/useWater";
 import { useAnalytics } from "../../hooks/useAnalytics";
 import { useProfile } from "../../hooks/useProfile";
-import { getExport, ExportFormat } from "../../src/api/analyticsApi";
+import {
+  getExport,
+  ExportFormat,
+  getHistoryByDate,
+  type HistoryByDateItem,
+} from "../../src/api/analyticsApi";
 import { api } from "../../src/api/axiosClient";
 import { fromMl, normalizeUnit, roundVolume } from "../../src/utils/units";
 
@@ -34,13 +39,11 @@ type CalendarCell = {
   inMonth: boolean;
 };
 
-function formatDateTime(iso?: string) {
+function formatTime(iso?: string) {
   if (!iso) return "--";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "--";
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
+  return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -123,6 +126,36 @@ function buildCalendarCells(monthStart: Date): CalendarCell[] {
   });
 }
 
+function formatMonthKeyLabel(monthKey?: string) {
+  if (!monthKey) return "N/A";
+  const [yearRaw, monthRaw] = monthKey.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!year || !month) return "N/A";
+  const d = new Date(Date.UTC(year, month - 1, 1));
+  if (Number.isNaN(d.getTime())) return "N/A";
+  return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function loadExpoPrintModuleSafely(): { printToFileAsync?: (opts: { html: string }) => Promise<{ uri: string }> } | null {
+  try {
+    // Avoid static module resolution crash when expo-print is not installed.
+    const dynamicRequire = (0, eval)("require");
+    return dynamicRequire("expo-print");
+  } catch {
+    return null;
+  }
+}
+
 export default function History() {
   const router = useRouter();
   const { profile } = useProfile();
@@ -136,6 +169,9 @@ export default function History() {
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<DateTarget>("start");
   const [calendarMonth, setCalendarMonth] = useState<Date>(toMonthStart(new Date()));
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState<string>(formatApiDate(new Date()));
+  const [selectedDayLogs, setSelectedDayLogs] = useState<HistoryByDateItem[]>([]);
+  const [selectedDayLoading, setSelectedDayLoading] = useState(false);
 
   const sortedLogs = useMemo(
     () =>
@@ -156,6 +192,8 @@ export default function History() {
     () => sortedLogs.reduce((sum, log) => sum + log.amountMl, 0),
     [sortedLogs]
   );
+  const todayKey = formatApiDate(new Date());
+  const selectedHistoryDateText = formatDisplayDate(selectedHistoryDate);
   const intakePct =
     dailyGoalMl > 0
       ? Math.max(0, Math.min(100, Math.round((totalIntakeMl / dailyGoalMl) * 100)))
@@ -167,7 +205,7 @@ export default function History() {
     return Math.round(total / weekly.length);
   }, [weekly]);
 
-  const monthlyComparison = useMemo(() => {
+  const monthTotals = useMemo(() => {
     const monthTotals = new Map<string, number>();
     monthly.forEach((entry) => {
       const d = new Date(entry.date);
@@ -175,20 +213,54 @@ export default function History() {
       const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
       monthTotals.set(key, (monthTotals.get(key) ?? 0) + entry.amountMl);
     });
+    return monthTotals;
+  }, [monthly]);
 
-    const keys = [...monthTotals.keys()].sort();
-    const currentKey = keys[keys.length - 1];
-    const prevKey = keys[keys.length - 2];
-    const currentTotal = currentKey ? monthTotals.get(currentKey) ?? 0 : 0;
-    const prevTotal = prevKey ? monthTotals.get(prevKey) ?? 0 : 0;
+  const availableMonthKeys = useMemo(() => {
+    return [...monthTotals.keys()].sort((a, b) => (a > b ? -1 : 1));
+  }, [monthTotals]);
 
+  const [compareCurrentMonthKey, setCompareCurrentMonthKey] = useState<string>("");
+  const [comparePreviousMonthKey, setComparePreviousMonthKey] = useState<string>("");
+
+  useEffect(() => {
+    const current = availableMonthKeys[0] || "";
+    const previous = availableMonthKeys[1] || "";
+    if (!compareCurrentMonthKey || !availableMonthKeys.includes(compareCurrentMonthKey)) {
+      setCompareCurrentMonthKey(current);
+    }
+    if (!comparePreviousMonthKey || !availableMonthKeys.includes(comparePreviousMonthKey)) {
+      setComparePreviousMonthKey(previous);
+    }
+  }, [availableMonthKeys, compareCurrentMonthKey, comparePreviousMonthKey]);
+
+  const monthlyComparison = useMemo(() => {
+    const currentTotal = compareCurrentMonthKey
+      ? monthTotals.get(compareCurrentMonthKey) ?? 0
+      : 0;
+    const prevTotal = comparePreviousMonthKey
+      ? monthTotals.get(comparePreviousMonthKey) ?? 0
+      : 0;
     return {
       currentTotal,
       prevTotal,
       diff: currentTotal - prevTotal,
-      hasPrev: !!prevKey,
+      hasPrev: Boolean(comparePreviousMonthKey),
     };
-  }, [monthly]);
+  }, [monthTotals, compareCurrentMonthKey, comparePreviousMonthKey]);
+
+  const moveComparedMonth = (target: "current" | "previous", offset: number) => {
+    const selectedKey =
+      target === "current" ? compareCurrentMonthKey : comparePreviousMonthKey;
+    const currentIdx = availableMonthKeys.indexOf(selectedKey);
+    if (currentIdx < 0) return;
+    const nextIdx = currentIdx + offset;
+    if (nextIdx < 0 || nextIdx >= availableMonthKeys.length) return;
+    const nextKey = availableMonthKeys[nextIdx];
+    if (!nextKey) return;
+    if (target === "current") setCompareCurrentMonthKey(nextKey);
+    else setComparePreviousMonthKey(nextKey);
+  };
 
   const ensureExportDirectory = async () => {
     const documentsDir = FileSystem.documentDirectory;
@@ -288,7 +360,153 @@ export default function History() {
     });
   };
 
+  const getExportPayload = async () => {
+    const res = await getExport("json", {
+      start: exportStartDate,
+      end: exportEndDate,
+    });
+    return res.data?.report ?? res.data;
+  };
+
+  const buildPdfHtml = (payload: any) => {
+    const listRaw =
+      payload?.dailyHistory ??
+      payload?.history ??
+      payload?.logs ??
+      payload?.entries ??
+      payload?.data?.history ??
+      payload?.data?.logs ??
+      [];
+
+    const historyRows = Array.isArray(listRaw)
+      ? listRaw
+          .map((row: any) => {
+            const amount = Number(
+              row?.amountMl ?? row?.amount_ml ?? row?.amount ?? row?.ml ?? 0
+            );
+            const timestamp = String(row?.timestamp ?? row?.createdAt ?? row?.date ?? "");
+            const date = new Date(timestamp);
+            const dateText = Number.isNaN(date.getTime())
+              ? "--"
+              : date.toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                });
+            const timeText = Number.isNaN(date.getTime())
+              ? "--"
+              : date.toLocaleTimeString(undefined, {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+            const amountText = `${roundVolume(fromMl(amount, unit), unit)} ${unit}`;
+
+            return `<tr>
+              <td>${escapeHtml(amountText)}</td>
+              <td>${escapeHtml(dateText)}</td>
+              <td>${escapeHtml(timeText)}</td>
+            </tr>`;
+          })
+          .join("")
+      : "";
+
+    const totalMl = Number(
+      payload?.summary?.totalIntakeMl ??
+        payload?.totalIntakeMl ??
+        payload?.total ??
+        payload?.totalMl ??
+        0
+    );
+    const goalMl = Number(
+      payload?.summary?.goalMl ??
+        payload?.dailyGoalMl ??
+        payload?.goal ??
+        profile?.dailyGoal ??
+        0
+    );
+    const completionPct =
+      goalMl > 0 ? Math.max(0, Math.min(100, Math.round((totalMl / goalMl) * 100))) : 0;
+
+    const totalText = `${roundVolume(fromMl(totalMl, unit), unit)} ${unit}`;
+    const goalText = `${roundVolume(fromMl(goalMl, unit), unit)} ${unit}`;
+
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0E1E40; padding: 18px; }
+      .title { font-size: 24px; font-weight: 800; margin-bottom: 2px; }
+      .sub { color: #5B7691; margin-bottom: 14px; }
+      .card { background: #F6FAFD; border: 1px solid #D8E6F2; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+      .summary { display: flex; gap: 8px; }
+      .summaryBox { flex: 1; background: #EAF4FA; border-radius: 10px; padding: 10px; }
+      .label { color: #5B7691; font-size: 12px; margin-bottom: 3px; }
+      .value { font-size: 16px; font-weight: 800; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { padding: 10px 6px; border-bottom: 1px solid #DDE8F2; text-align: left; }
+      th { color: #4F6A82; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+      .empty { color: #7C94AB; font-style: italic; }
+      .footer { margin-top: 10px; color: #6B829A; font-size: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="title">Hydration Report</div>
+    <div class="sub">Range: ${escapeHtml(exportStartDate)} to ${escapeHtml(exportEndDate)}</div>
+
+    <div class="card">
+      <div class="summary">
+        <div class="summaryBox">
+          <div class="label">Total Intake</div>
+          <div class="value">${escapeHtml(totalText)}</div>
+        </div>
+        <div class="summaryBox">
+          <div class="label">Daily Goal</div>
+          <div class="value">${escapeHtml(goalText)}</div>
+        </div>
+        <div class="summaryBox">
+          <div class="label">Completion</div>
+          <div class="value">${completionPct}%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label" style="margin-bottom: 6px;">Daily History</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Amount</th>
+            <th>Date</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            historyRows ||
+            `<tr><td class="empty" colspan="3">No history available for selected range.</td></tr>`
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer">Generated on ${escapeHtml(new Date().toLocaleString())}</div>
+  </body>
+</html>`;
+  };
+
   const savePdfToLocal = async (path: string) => {
+    const printModule = loadExpoPrintModuleSafely();
+
+    if (printModule?.printToFileAsync) {
+      const payload = await getExportPayload();
+      const html = buildPdfHtml(payload);
+      const result = await printModule.printToFileAsync({ html });
+      await FileSystem.copyAsync({ from: result.uri, to: path });
+      return;
+    }
+
+    // Fallback to backend PDF export when expo-print is unavailable.
     const baseUrl = api.defaults.baseURL?.replace(/\/$/, "");
     if (!baseUrl) throw new Error("API base URL is missing.");
 
@@ -305,30 +523,6 @@ export default function History() {
 
     if (!downloadRes || downloadRes.status < 200 || downloadRes.status >= 300) {
       throw new Error("Failed to download PDF.");
-    }
-
-    const contentType = String(
-      downloadRes.headers?.["content-type"] || downloadRes.headers?.["Content-Type"] || ""
-    ).toLowerCase();
-
-    const fileInfo = await FileSystem.getInfoAsync(path);
-    const fileSize =
-      typeof (fileInfo as { size?: number }).size === "number"
-        ? (fileInfo as { size?: number }).size ?? 0
-        : 0;
-
-    if (!contentType.includes("application/pdf") || fileSize < 100) {
-      throw new Error("Server did not return a valid PDF.");
-    }
-
-    const pdfHeaderBase64 = await FileSystem.readAsStringAsync(path, {
-      encoding: FileSystem.EncodingType.Base64,
-      position: 0,
-      length: 12,
-    });
-
-    if (!pdfHeaderBase64.startsWith("JVBERi0")) {
-      throw new Error("Downloaded file is not a valid PDF.");
     }
   };
 
@@ -392,12 +586,55 @@ export default function History() {
     setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
   };
 
+  const moveHistoryDate = (offset: number) => {
+    const date = new Date(`${selectedHistoryDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    date.setDate(date.getDate() + offset);
+    setSelectedHistoryDate(formatApiDate(date));
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchSelectedDayHistory = async () => {
+      try {
+        setSelectedDayLoading(true);
+        const rows = await getHistoryByDate(selectedHistoryDate);
+        if (!active) return;
+
+        const sorted = [...rows].sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        setSelectedDayLogs(sorted);
+      } catch {
+        if (!active) return;
+        setSelectedDayLogs([]);
+      } finally {
+        if (active) {
+          setSelectedDayLoading(false);
+        }
+      }
+    };
+
+    fetchSelectedDayHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedHistoryDate]);
+
   if (logsLoading || analyticsLoading) {
     return (
       <Screen>
-        <TabHeader title="History" onProfilePress={() => router.push("/profile")} />
+        <View style={styles.pageHeaderWrap}>
+          <TabHeader
+            title="History"
+            onProfilePress={() => router.push("/profile")}
+            style={styles.pageHeader}
+          />
+        </View>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#14B2CF" />
+          <LoadingAnimation size={96} />
         </View>
       </Screen>
     );
@@ -405,25 +642,28 @@ export default function History() {
 
   return (
     <Screen>
-      <TabHeader
-        title="History"
-        onProfilePress={() => router.push("/profile")}
-        action={
-          <Button
-            mode="contained"
-            onPress={handleExportReport}
-            disabled={exporting}
-            loading={exporting}
-            buttonColor="#14B2CF"
-            style={styles.headerExportBtn}
-            contentStyle={styles.headerExportBtnContent}
-            labelStyle={styles.headerExportBtnLabel}
-            compact
-          >
-            Export
-          </Button>
-        }
-      />
+      <View style={styles.pageHeaderWrap}>
+        <TabHeader
+          title="History"
+          onProfilePress={() => router.push("/profile")}
+          style={styles.pageHeader}
+          action={
+            <Button
+              mode="contained"
+              onPress={handleExportReport}
+              disabled={exporting}
+              loading={exporting}
+              buttonColor="#14B2CF"
+              style={styles.headerExportBtn}
+              contentStyle={styles.headerExportBtnContent}
+              labelStyle={styles.headerExportBtnLabel}
+              compact
+            >
+              Export
+            </Button>
+          }
+        />
+      </View>
 
       <View style={styles.intakeStickyWrap}>
         <View style={styles.intakeCard}>
@@ -468,13 +708,53 @@ export default function History() {
           </View>
           <View style={styles.compareRow}>
             <View style={styles.compareBox}>
-              <Text style={styles.compareLabel}>Current</Text>
+              <Text style={styles.compareLabel}>Current month</Text>
+              <View style={styles.compareHeaderRow}>
+                <Pressable
+                  onPress={() => moveComparedMonth("current", 1)}
+                  disabled={
+                    availableMonthKeys.indexOf(compareCurrentMonthKey) >=
+                    availableMonthKeys.length - 1
+                  }
+                  style={styles.compareMonthBtn}
+                >
+                  <Ionicons name="chevron-back" size={14} color="#4F6A82" />
+                </Pressable>
+                <Text style={styles.compareMonthText}>{formatMonthKeyLabel(compareCurrentMonthKey)}</Text>
+                <Pressable
+                  onPress={() => moveComparedMonth("current", -1)}
+                  disabled={availableMonthKeys.indexOf(compareCurrentMonthKey) <= 0}
+                  style={styles.compareMonthBtn}
+                >
+                  <Ionicons name="chevron-forward" size={14} color="#4F6A82" />
+                </Pressable>
+              </View>
               <Text style={styles.compareValue}>
                 {roundVolume(fromMl(monthlyComparison.currentTotal, unit), unit)} {unit}
               </Text>
             </View>
             <View style={styles.compareBox}>
-              <Text style={styles.compareLabel}>Previous</Text>
+              <Text style={styles.compareLabel}>Compared month</Text>
+              <View style={styles.compareHeaderRow}>
+                <Pressable
+                  onPress={() => moveComparedMonth("previous", 1)}
+                  disabled={
+                    availableMonthKeys.indexOf(comparePreviousMonthKey) >=
+                    availableMonthKeys.length - 1
+                  }
+                  style={styles.compareMonthBtn}
+                >
+                  <Ionicons name="chevron-back" size={14} color="#4F6A82" />
+                </Pressable>
+                <Text style={styles.compareMonthText}>{formatMonthKeyLabel(comparePreviousMonthKey)}</Text>
+                <Pressable
+                  onPress={() => moveComparedMonth("previous", -1)}
+                  disabled={availableMonthKeys.indexOf(comparePreviousMonthKey) <= 0}
+                  style={styles.compareMonthBtn}
+                >
+                  <Ionicons name="chevron-forward" size={14} color="#4F6A82" />
+                </Pressable>
+              </View>
               <Text style={styles.compareValue}>
                 {monthlyComparison.hasPrev
                   ? `${roundVolume(fromMl(monthlyComparison.prevTotal, unit), unit)} ${unit}`
@@ -491,24 +771,64 @@ export default function History() {
         </View>
 
         <View style={styles.card}>
+          <View style={styles.historyDateWrap}>
+            <Pressable
+              onPress={() => moveHistoryDate(-1)}
+              style={styles.historyDateArrowBtn}
+            >
+              <Ionicons name="chevron-back" size={18} color="#1DA8E2" />
+            </Pressable>
+            <View style={styles.historyDateCenter}>
+              <Text style={styles.historyDateLabel}>Date</Text>
+              <Text style={styles.historyDateValue}>{selectedHistoryDateText}</Text>
+            </View>
+            <Pressable
+              onPress={() => moveHistoryDate(1)}
+              disabled={selectedHistoryDate >= todayKey}
+              style={[
+                styles.historyDateArrowBtn,
+                selectedHistoryDate >= todayKey && styles.historyDateArrowBtnDisabled,
+              ]}
+            >
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={selectedHistoryDate >= todayKey ? "#A9BDCF" : "#1DA8E2"}
+              />
+            </Pressable>
+          </View>
+
           <View style={styles.sectionHeading}>
             <Ionicons name="calendar-outline" size={17} color="#22B9C7" />
             <Text style={styles.sectionTitle}>Daily history</Text>
           </View>
-          {sortedLogs.length === 0 ? (
-            <Text style={styles.emptyText}>No logs yet</Text>
+          {selectedDayLoading ? (
+            <View style={styles.historyLoaderWrap}>
+              <LoadingAnimation size={64} />
+            </View>
+          ) : selectedDayLogs.length === 0 ? (
+            <Text style={styles.emptyText}>No logs for this date</Text>
           ) : (
-            sortedLogs.slice(0, 14).map((log, idx) => (
-              <View key={`${log.id}-${idx}`} style={[styles.historyRow, idx === 13 && styles.noBorder]}>
-                <View>
+            selectedDayLogs.map((log, idx) => (
+              <View
+                key={`${log.id}-${idx}`}
+                style={[
+                  styles.historyRow,
+                  idx === selectedDayLogs.length - 1 && styles.noBorder,
+                ]}
+              >
+                <View style={styles.historyLeft}>
                   <Text style={styles.historyAmount}>
                     {roundVolume(fromMl(log.amountMl, unit), unit)} {unit}
                   </Text>
-                  <Text style={styles.historyTime}>{formatDateTime(log.timestamp)}</Text>
+                  <Text style={styles.historyDateText}>{formatDate(log.timestamp)}</Text>
                 </View>
-                <Chip compact style={styles.historyChip}>
-                  {formatDate(log.timestamp)}
-                </Chip>
+                <View style={styles.historyRight}>
+                  <View style={styles.historyTimePill}>
+                    <Text style={styles.historyTimePillText}>{formatTime(log.timestamp)}</Text>
+                  </View>
+                  <Ionicons name="information-circle" size={20} color="#C3CEDB" />
+                </View>
               </View>
             ))
           )}
@@ -653,6 +973,18 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 24,
   },
+  pageHeaderWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingBottom: 4,
+    backgroundColor: "#EAF2F8",
+  },
+  pageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
   headerExportBtn: {
     borderRadius: 14,
   },
@@ -768,8 +1100,45 @@ const styles = StyleSheet.create({
     color: "#8399AF",
     fontWeight: "600",
   },
-  historyRow: {
+  historyDateWrap: {
+    backgroundColor: "#F8FBFE",
+    borderWidth: 1,
+    borderColor: "#DFE8F1",
+    borderRadius: 16,
+    paddingHorizontal: 10,
     paddingVertical: 10,
+    marginBottom: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  historyDateArrowBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  historyDateArrowBtnDisabled: {
+    opacity: 0.55,
+  },
+  historyDateCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  historyDateLabel: {
+    color: "#87A0B8",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  historyDateValue: {
+    marginTop: 2,
+    color: "#253451",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  historyRow: {
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#E0EBF3",
     flexDirection: "row",
@@ -777,20 +1146,45 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  historyLeft: {
+    flex: 1,
+  },
+  historyRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   noBorder: {
     borderBottomWidth: 0,
   },
   historyAmount: {
-    color: "#0E1E40",
+    color: "#27344A",
     fontWeight: "800",
-    fontSize: 16,
+    fontSize: 18,
   },
-  historyTime: {
-    color: "#6E879E",
+  historyDateText: {
     marginTop: 2,
+    color: "#9CB0C3",
+    fontSize: 18,
+    fontWeight: "600",
   },
-  historyChip: {
-    backgroundColor: "#E9EEF4",
+  historyTimePill: {
+    minWidth: 84,
+    borderRadius: 10,
+    backgroundColor: "#ECF1F6",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: "center",
+  },
+  historyTimePillText: {
+    color: "#4A5D77",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  historyLoaderWrap: {
+    minHeight: 100,
+    alignItems: "center",
+    justifyContent: "center",
   },
   statsRow: {
     flexDirection: "row",
@@ -839,6 +1233,30 @@ const styles = StyleSheet.create({
   },
   compareLabel: {
     color: "#5B7691",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  compareHeaderRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  compareMonthBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#D5DEE8",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F4F9FD",
+  },
+  compareMonthText: {
+    flex: 1,
+    textAlign: "center",
+    color: "#4F6A82",
     fontSize: 12,
     fontWeight: "700",
   },

@@ -5,7 +5,6 @@ import {
   Text,
   View,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
 } from "react-native";
 import {
@@ -17,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Screen from "../../components/Screen";
 import TabHeader from "../../components/TabHeader";
+import LoadingAnimation from "../../components/LoadingAnimation";
 import { useProfile } from "../../hooks/useProfile";
 import { useWater } from "../../hooks/useWater";
 import {
@@ -68,12 +68,15 @@ export default function Dashboard() {
   if (profileLoading || loading) {
     return (
       <Screen>
-        <TabHeader
-          title="Dashboard"
-          onProfilePress={() => router.push("/profile")}
-        />
+        <View style={styles.pageHeaderWrap}>
+          <TabHeader
+            title="Dashboard"
+            onProfilePress={() => router.push("/profile")}
+            style={styles.pageHeader}
+          />
+        </View>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#14B2CF" />
+          <LoadingAnimation size={96} />
         </View>
       </Screen>
     );
@@ -136,10 +139,13 @@ export default function Dashboard() {
 
   return (
     <Screen>
-      <TabHeader
-        title="Dashboard"
-        onProfilePress={() => router.push("/profile")}
-      />
+      <View style={styles.pageHeaderWrap}>
+        <TabHeader
+          title="Dashboard"
+          onProfilePress={() => router.push("/profile")}
+          style={styles.pageHeader}
+        />
+      </View>
 
       <ScrollView
         contentContainerStyle={styles.container}
@@ -398,13 +404,17 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     gap: 16,
   },
+  pageHeaderWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingBottom: 4,
+    backgroundColor: "#EAF2F8",
+  },
   pageHeader: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 2,
   },
   pageTitle: {
     fontSize: 23,

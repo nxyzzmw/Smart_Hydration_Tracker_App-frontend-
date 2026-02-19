@@ -1,11 +1,12 @@
 import React, { useEffect } from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import {
   ACCESS_TOKEN_KEY,
   REFRESH_TOKEN_KEY,
 } from "../src/api/axiosClient";
+import LoadingAnimation from "../components/LoadingAnimation";
 
 export default function Splash() {
   const router = useRouter();
@@ -20,16 +21,13 @@ export default function Splash() {
           REFRESH_TOKEN_KEY,
         ]);
 
-        // Small delay for splash animation feel
-        setTimeout(() => {
-          if (!mounted) return;
+        if (!mounted) return;
 
-          if (token?.[1] || refreshToken?.[1]) {
-            router.replace("/tabs");
-          } else {
-            router.replace("/auth/login");
-          }
-        }, 800);
+        if (token?.[1] || refreshToken?.[1]) {
+          router.replace("/tabs");
+        } else {
+          router.replace("/auth/login");
+        }
 
       } catch (error) {
         console.log("Splash error:", error);
@@ -42,11 +40,11 @@ export default function Splash() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [router]);
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" />
+      <LoadingAnimation size={140} />
     </View>
   );
 }
