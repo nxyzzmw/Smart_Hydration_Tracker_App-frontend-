@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hydration Tracker",
     "slug": "myApp",
-    "icon": "./assets/images/app-icon.png",
+    "icon": "./assets/images/app-icon-square.png",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "myapp",
@@ -10,12 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nxyzzmw.myapp"
+      "bundleIdentifier": "com.nxyzzmw.myapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/app-icon.png",
+        "foregroundImage": "./assets/images/app-icon-square.png",
         "backgroundColor": "#E6F4FE"
       },
       "edgeToEdgeEnabled": true,

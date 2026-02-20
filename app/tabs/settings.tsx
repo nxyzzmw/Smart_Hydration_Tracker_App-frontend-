@@ -13,7 +13,7 @@ import { Button, Switch } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import Screen from "../../components/Screen";
+import TabSwipeScreen from "../../components/TabSwipeScreen";
 import TabHeader from "../../components/TabHeader";
 import LoadingAnimation from "../../components/LoadingAnimation";
 import { useProfile } from "../../hooks/useProfile";
@@ -582,16 +582,16 @@ export default function Settings() {
 
   if (loading) {
     return (
-      <Screen>
+      <TabSwipeScreen>
         <View style={styles.loadingWrap}>
           <LoadingAnimation size={96} />
         </View>
-      </Screen>
+      </TabSwipeScreen>
     );
   }
 
   return (
-    <Screen>
+    <TabSwipeScreen>
       <View style={styles.pageHeaderWrap}>
         <TabHeader
           title="Settings"
@@ -844,7 +844,7 @@ export default function Settings() {
           </View>
         </View>
       </Modal>
-    </Screen>
+    </TabSwipeScreen>
   );
 }
 

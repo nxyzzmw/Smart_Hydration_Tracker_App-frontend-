@@ -14,7 +14,7 @@ import { Button } from "react-native-paper";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
-import Screen from "../../components/Screen";
+import TabSwipeScreen from "../../components/TabSwipeScreen";
 import TabHeader from "../../components/TabHeader";
 import LoadingAnimation from "../../components/LoadingAnimation";
 import { useWater } from "../../hooks/useWater";
@@ -146,7 +146,9 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-function loadExpoPrintModuleSafely(): { printToFileAsync?: (opts: { html: string }) => Promise<{ uri: string }> } | null {
+function loadExpoPrintModuleSafely(): {
+  printToFileAsync?: (opts: { html: string }) => Promise<{ uri: string }>;
+} | null {
   try {
     // Avoid static module resolution crash when expo-print is not installed.
     const dynamicRequire = (0, eval)("require");
@@ -160,7 +162,12 @@ export default function History() {
   const router = useRouter();
   const { profile } = useProfile();
   const { logs, loading: logsLoading } = useWater();
-  const { weekly, monthly, streakDays, loading: analyticsLoading } = useAnalytics();
+  const {
+    weekly,
+    monthly,
+    streakDays,
+    loading: analyticsLoading,
+  } = useAnalytics();
 
   const [exporting, setExporting] = useState(false);
   const [exportModalVisible, setExportModalVisible] = useState(false);
@@ -168,35 +175,45 @@ export default function History() {
   const [exportEndDate, setExportEndDate] = useState("");
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<DateTarget>("start");
-  const [calendarMonth, setCalendarMonth] = useState<Date>(toMonthStart(new Date()));
-  const [selectedHistoryDate, setSelectedHistoryDate] = useState<string>(formatApiDate(new Date()));
-  const [selectedDayLogs, setSelectedDayLogs] = useState<HistoryByDateItem[]>([]);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(
+    toMonthStart(new Date()),
+  );
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState<string>(
+    formatApiDate(new Date()),
+  );
+  const [selectedDayLogs, setSelectedDayLogs] = useState<HistoryByDateItem[]>(
+    [],
+  );
   const [selectedDayLoading, setSelectedDayLoading] = useState(false);
 
   const sortedLogs = useMemo(
     () =>
       [...logs].sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       ),
-    [logs]
+    [logs],
   );
 
   const calendarCells = useMemo(
     () => buildCalendarCells(calendarMonth),
-    [calendarMonth]
+    [calendarMonth],
   );
 
   const unit = normalizeUnit(profile?.unit);
   const dailyGoalMl = Number(profile?.dailyGoal ?? 0);
   const totalIntakeMl = useMemo(
     () => sortedLogs.reduce((sum, log) => sum + log.amountMl, 0),
-    [sortedLogs]
+    [sortedLogs],
   );
   const todayKey = formatApiDate(new Date());
   const selectedHistoryDateText = formatDisplayDate(selectedHistoryDate);
   const intakePct =
     dailyGoalMl > 0
-      ? Math.max(0, Math.min(100, Math.round((totalIntakeMl / dailyGoalMl) * 100)))
+      ? Math.max(
+          0,
+          Math.min(100, Math.round((totalIntakeMl / dailyGoalMl) * 100)),
+        )
       : 0;
 
   const weeklyPerformance = useMemo(() => {
@@ -220,26 +237,34 @@ export default function History() {
     return [...monthTotals.keys()].sort((a, b) => (a > b ? -1 : 1));
   }, [monthTotals]);
 
-  const [compareCurrentMonthKey, setCompareCurrentMonthKey] = useState<string>("");
-  const [comparePreviousMonthKey, setComparePreviousMonthKey] = useState<string>("");
+  const [compareCurrentMonthKey, setCompareCurrentMonthKey] =
+    useState<string>("");
+  const [comparePreviousMonthKey, setComparePreviousMonthKey] =
+    useState<string>("");
 
   useEffect(() => {
     const current = availableMonthKeys[0] || "";
     const previous = availableMonthKeys[1] || "";
-    if (!compareCurrentMonthKey || !availableMonthKeys.includes(compareCurrentMonthKey)) {
+    if (
+      !compareCurrentMonthKey ||
+      !availableMonthKeys.includes(compareCurrentMonthKey)
+    ) {
       setCompareCurrentMonthKey(current);
     }
-    if (!comparePreviousMonthKey || !availableMonthKeys.includes(comparePreviousMonthKey)) {
+    if (
+      !comparePreviousMonthKey ||
+      !availableMonthKeys.includes(comparePreviousMonthKey)
+    ) {
       setComparePreviousMonthKey(previous);
     }
   }, [availableMonthKeys, compareCurrentMonthKey, comparePreviousMonthKey]);
 
   const monthlyComparison = useMemo(() => {
     const currentTotal = compareCurrentMonthKey
-      ? monthTotals.get(compareCurrentMonthKey) ?? 0
+      ? (monthTotals.get(compareCurrentMonthKey) ?? 0)
       : 0;
     const prevTotal = comparePreviousMonthKey
-      ? monthTotals.get(comparePreviousMonthKey) ?? 0
+      ? (monthTotals.get(comparePreviousMonthKey) ?? 0)
       : 0;
     return {
       currentTotal,
@@ -249,7 +274,10 @@ export default function History() {
     };
   }, [monthTotals, compareCurrentMonthKey, comparePreviousMonthKey]);
 
-  const moveComparedMonth = (target: "current" | "previous", offset: number) => {
+  const moveComparedMonth = (
+    target: "current" | "previous",
+    offset: number,
+  ) => {
     const selectedKey =
       target === "current" ? compareCurrentMonthKey : comparePreviousMonthKey;
     const currentIdx = availableMonthKeys.indexOf(selectedKey);
@@ -264,7 +292,8 @@ export default function History() {
 
   const ensureExportDirectory = async () => {
     const documentsDir = FileSystem.documentDirectory;
-    if (!documentsDir) throw new Error("Local storage is not available on this device.");
+    if (!documentsDir)
+      throw new Error("Local storage is not available on this device.");
 
     const exportDir = `${documentsDir}exports/`;
     await FileSystem.makeDirectoryAsync(exportDir, { intermediates: true });
@@ -275,15 +304,21 @@ export default function History() {
     const cached = await AsyncStorage.getItem(EXPORT_DIRECTORY_URI_KEY);
     if (cached) return cached;
 
-    const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot("Download");
+    const initialUri =
+      FileSystem.StorageAccessFramework.getUriForDirectoryInRoot("Download");
     const permission =
-      await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
+      await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(
+        initialUri,
+      );
 
     if (!permission.granted || !permission.directoryUri) {
       throw new Error("Storage permission denied.");
     }
 
-    await AsyncStorage.setItem(EXPORT_DIRECTORY_URI_KEY, permission.directoryUri);
+    await AsyncStorage.setItem(
+      EXPORT_DIRECTORY_URI_KEY,
+      permission.directoryUri,
+    );
     return permission.directoryUri;
   };
 
@@ -291,7 +326,7 @@ export default function History() {
     localPath: string,
     filenameBase: string,
     mimeType: string,
-    encoding: "utf8" | "base64"
+    encoding: "utf8" | "base64",
   ) => {
     if (Platform.OS !== "android") return;
 
@@ -299,7 +334,7 @@ export default function History() {
     const targetUri = await FileSystem.StorageAccessFramework.createFileAsync(
       directoryUri,
       filenameBase,
-      mimeType
+      mimeType,
     );
     const content = await FileSystem.readAsStringAsync(localPath, {
       encoding:
@@ -308,12 +343,16 @@ export default function History() {
           : FileSystem.EncodingType.UTF8,
     });
 
-    await FileSystem.StorageAccessFramework.writeAsStringAsync(targetUri, content, {
-      encoding:
-        encoding === "base64"
-          ? FileSystem.EncodingType.Base64
-          : FileSystem.EncodingType.UTF8,
-    });
+    await FileSystem.StorageAccessFramework.writeAsStringAsync(
+      targetUri,
+      content,
+      {
+        encoding:
+          encoding === "base64"
+            ? FileSystem.EncodingType.Base64
+            : FileSystem.EncodingType.UTF8,
+      },
+    );
   };
 
   const validateDateRange = () => {
@@ -322,7 +361,10 @@ export default function History() {
       return false;
     }
 
-    if (!isValidDateInput(exportStartDate) || !isValidDateInput(exportEndDate)) {
+    if (
+      !isValidDateInput(exportStartDate) ||
+      !isValidDateInput(exportEndDate)
+    ) {
       Alert.alert("Invalid date", "Use valid dates for both From and To.");
       return false;
     }
@@ -355,9 +397,13 @@ export default function History() {
     }
 
     const payload = data?.report ?? data;
-    await FileSystem.writeAsStringAsync(path, JSON.stringify(payload, null, 2), {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    await FileSystem.writeAsStringAsync(
+      path,
+      JSON.stringify(payload, null, 2),
+      {
+        encoding: FileSystem.EncodingType.UTF8,
+      },
+    );
   };
 
   const getExportPayload = async () => {
@@ -382,9 +428,11 @@ export default function History() {
       ? listRaw
           .map((row: any) => {
             const amount = Number(
-              row?.amountMl ?? row?.amount_ml ?? row?.amount ?? row?.ml ?? 0
+              row?.amountMl ?? row?.amount_ml ?? row?.amount ?? row?.ml ?? 0,
             );
-            const timestamp = String(row?.timestamp ?? row?.createdAt ?? row?.date ?? "");
+            const timestamp = String(
+              row?.timestamp ?? row?.createdAt ?? row?.date ?? "",
+            );
             const date = new Date(timestamp);
             const dateText = Number.isNaN(date.getTime())
               ? "--"
@@ -415,83 +463,455 @@ export default function History() {
         payload?.totalIntakeMl ??
         payload?.total ??
         payload?.totalMl ??
-        0
+        0,
     );
     const goalMl = Number(
       payload?.summary?.goalMl ??
         payload?.dailyGoalMl ??
         payload?.goal ??
         profile?.dailyGoal ??
-        0
+        0,
     );
     const completionPct =
-      goalMl > 0 ? Math.max(0, Math.min(100, Math.round((totalMl / goalMl) * 100))) : 0;
+      goalMl > 0
+        ? Math.max(0, Math.min(100, Math.round((totalMl / goalMl) * 100)))
+        : 0;
 
     const totalText = `${roundVolume(fromMl(totalMl, unit), unit)} ${unit}`;
     const goalText = `${roundVolume(fromMl(goalMl, unit), unit)} ${unit}`;
 
     return `<!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0E1E40; padding: 18px; }
-      .title { font-size: 24px; font-weight: 800; margin-bottom: 2px; }
-      .sub { color: #5B7691; margin-bottom: 14px; }
-      .card { background: #F6FAFD; border: 1px solid #D8E6F2; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
-      .summary { display: flex; gap: 8px; }
-      .summaryBox { flex: 1; background: #EAF4FA; border-radius: 10px; padding: 10px; }
-      .label { color: #5B7691; font-size: 12px; margin-bottom: 3px; }
-      .value { font-size: 16px; font-weight: 800; }
-      table { width: 100%; border-collapse: collapse; font-size: 12px; }
-      th, td { padding: 10px 6px; border-bottom: 1px solid #DDE8F2; text-align: left; }
-      th { color: #4F6A82; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
-      .empty { color: #7C94AB; font-style: italic; }
-      .footer { margin-top: 10px; color: #6B829A; font-size: 10px; }
-    </style>
-  </head>
-  <body>
-    <div class="title">Hydration Report</div>
-    <div class="sub">Range: ${escapeHtml(exportStartDate)} to ${escapeHtml(exportEndDate)}</div>
+<head>
+<meta charset="utf-8" />
 
-    <div class="card">
-      <div class="summary">
-        <div class="summaryBox">
-          <div class="label">Total Intake</div>
-          <div class="value">${escapeHtml(totalText)}</div>
-        </div>
-        <div class="summaryBox">
-          <div class="label">Daily Goal</div>
-          <div class="value">${escapeHtml(goalText)}</div>
-        </div>
-        <div class="summaryBox">
-          <div class="label">Completion</div>
-          <div class="value">${completionPct}%</div>
-        </div>
-      </div>
-    </div>
+<style>
 
-    <div class="card">
-      <div class="label" style="margin-bottom: 6px;">Daily History</div>
-      <table>
-        <thead>
-          <tr>
-            <th>Amount</th>
-            <th>Date</th>
-            <th>Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${
-            historyRows ||
-            `<tr><td class="empty" colspan="3">No history available for selected range.</td></tr>`
-          }
-        </tbody>
-      </table>
-    </div>
+* {
+  box-sizing: border-box;
+}
 
-    <div class="footer">Generated on ${escapeHtml(new Date().toLocaleString())}</div>
-  </body>
+body {
+
+  font-family:
+  -apple-system,
+  BlinkMacSystemFont,
+  "Segoe UI",
+  Roboto,
+  Arial,
+  sans-serif;
+
+  background: #F4F8FB;
+
+  padding: 28px;
+
+  color: #0E1E40;
+
+}
+
+
+
+/* HEADER */
+
+.header {
+
+  text-align: center;
+
+  margin-bottom: 28px;
+
+}
+
+.title {
+
+  font-size: 32px;
+
+  font-weight: 900;
+
+  color: #0E1E40;
+
+}
+
+.sub {
+
+  margin-top: 6px;
+
+  font-size: 14px;
+
+  color: #6B829A;
+
+}
+
+
+
+/* CARD */
+
+.card {
+
+  background: #FFFFFF;
+
+  border-radius: 18px;
+
+  padding: 18px;
+
+  margin-bottom: 18px;
+
+  border: 1px solid #E1EDF5;
+
+  box-shadow:
+
+    0 4px 14px rgba(14,30,64,0.06);
+
+}
+
+
+
+/* SUMMARY */
+
+.summary {
+
+  display: flex;
+
+  gap: 14px;
+
+}
+
+
+
+.summaryBox {
+
+  flex: 1;
+
+  background: linear-gradient(
+
+    135deg,
+
+    #E9F6FC,
+
+    #F4FBFF
+
+  );
+
+  padding: 16px;
+
+  border-radius: 14px;
+
+  border: 1px solid #D8EAF5;
+
+}
+
+
+
+.label {
+
+  font-size: 13px;
+
+  color: #5B7691;
+
+  font-weight: 600;
+
+}
+
+
+
+.value {
+
+  margin-top: 6px;
+
+  font-size: 22px;
+
+  font-weight: 900;
+
+  color: #0E1E40;
+
+}
+
+
+
+/* TABLE */
+
+.tableTitle {
+
+  font-size: 18px;
+
+  font-weight: 800;
+
+  margin-bottom: 12px;
+
+}
+
+
+
+table {
+
+  width: 100%;
+
+  border-collapse: collapse;
+
+}
+
+
+
+th {
+
+  background: #EAF4FA;
+
+  padding: 12px;
+
+  text-align: left;
+
+  font-size: 12px;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.6px;
+
+  color: #4F6A82;
+
+  border-bottom: 2px solid #DDE8F2;
+
+}
+
+
+
+td {
+
+  padding: 12px;
+
+  font-size: 14px;
+
+  border-bottom: 1px solid #EEF3F7;
+
+}
+
+
+
+tr:nth-child(even) {
+
+  background: #F9FCFF;
+
+}
+
+
+
+.empty {
+
+  text-align: center;
+
+  padding: 30px;
+
+  color: #8AA2B6;
+
+  font-style: italic;
+
+}
+
+
+
+/* FOOTER */
+
+.footer {
+
+  text-align: center;
+
+  margin-top: 30px;
+
+  padding-top: 16px;
+
+  border-top: 1px solid #E1EDF5;
+
+  font-size: 12px;
+
+  color: #7C94AB;
+
+}
+
+
+
+/* WATERMARK */
+
+.watermark {
+
+  position: fixed;
+
+  bottom: 20px;
+
+  right: 20px;
+
+  font-size: 10px;
+
+  color: #B0C6D6;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+
+
+<div class="header">
+
+<div class="title">
+
+Hydration Report
+
+</div>
+
+<div class="sub">
+
+${escapeHtml(exportStartDate)}
+
+—
+
+${escapeHtml(exportEndDate)}
+
+</div>
+
+</div>
+
+
+
+<div class="card">
+
+<div class="summary">
+
+<div class="summaryBox">
+
+<div class="label">
+
+Total Intake
+
+</div>
+
+<div class="value">
+
+${escapeHtml(totalText)}
+
+</div>
+
+</div>
+
+
+
+<div class="summaryBox">
+
+<div class="label">
+
+Daily Goal
+
+</div>
+
+<div class="value">
+
+${escapeHtml(goalText)}
+
+</div>
+
+</div>
+
+
+
+<div class="summaryBox">
+
+<div class="label">
+
+Completion
+
+</div>
+
+<div class="value">
+
+${completionPct}%
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+
+
+<div class="card">
+
+<div class="tableTitle">
+
+Daily History
+
+</div>
+
+
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Amount</th>
+
+<th>Date</th>
+
+<th>Time</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+
+
+${
+  historyRows ||
+  `
+
+<tr>
+
+<td colspan="3" class="empty">
+
+No hydration history found
+
+</td>
+
+</tr>
+
+`
+}
+
+
+
+</tbody>
+
+</table>
+
+</div>
+
+
+
+<div class="footer">
+
+Generated on
+
+${escapeHtml(new Date().toLocaleString())}
+
+</div>
+
+
+
+<div class="watermark">
+
+Hydration Tracker App
+
+</div>
+
+
+
+</body>
+
 </html>`;
   };
 
@@ -535,19 +955,31 @@ export default function History() {
       if (format === "json") {
         const jsonPath = `${exportDir}${filenameBase}.json`;
         await saveJsonToLocal(jsonPath);
-        await saveToPublicAndroidDirectory(jsonPath, filenameBase, "application/json", "utf8");
+        await saveToPublicAndroidDirectory(
+          jsonPath,
+          filenameBase,
+          "application/json",
+          "utf8",
+        );
         Alert.alert("Export complete", "Download completed.");
         return;
       }
 
       const pdfPath = `${exportDir}${filenameBase}.pdf`;
       await savePdfToLocal(pdfPath);
-      await saveToPublicAndroidDirectory(pdfPath, filenameBase, "application/pdf", "base64");
+      await saveToPublicAndroidDirectory(
+        pdfPath,
+        filenameBase,
+        "application/pdf",
+        "base64",
+      );
       Alert.alert("Export complete", "Download completed.");
     } catch (error: any) {
       Alert.alert(
         "Export failed",
-        error?.response?.data?.message || error?.message || "Unable to export report right now."
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to export report right now.",
       );
     } finally {
       setExporting(false);
@@ -570,7 +1002,10 @@ export default function History() {
 
   const openCalendar = (target: DateTarget) => {
     setCalendarTarget(target);
-    const selected = target === "start" ? toDateFromIso(exportStartDate) : toDateFromIso(exportEndDate);
+    const selected =
+      target === "start"
+        ? toDateFromIso(exportStartDate)
+        : toDateFromIso(exportEndDate);
     setCalendarMonth(toMonthStart(selected ?? new Date()));
     setCalendarVisible(true);
   };
@@ -583,7 +1018,9 @@ export default function History() {
   };
 
   const changeMonth = (offset: number) => {
-    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
+    setCalendarMonth(
+      (prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1),
+    );
   };
 
   const moveHistoryDate = (offset: number) => {
@@ -603,7 +1040,8 @@ export default function History() {
         if (!active) return;
 
         const sorted = [...rows].sort(
-          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          (a, b) =>
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
         );
         setSelectedDayLogs(sorted);
       } catch {
@@ -625,7 +1063,7 @@ export default function History() {
 
   if (logsLoading || analyticsLoading) {
     return (
-      <Screen>
+      <TabSwipeScreen>
         <View style={styles.pageHeaderWrap}>
           <TabHeader
             title="History"
@@ -636,12 +1074,12 @@ export default function History() {
         <View style={styles.center}>
           <LoadingAnimation size={96} />
         </View>
-      </Screen>
+      </TabSwipeScreen>
     );
   }
 
   return (
-    <Screen>
+    <TabSwipeScreen>
       <View style={styles.pageHeaderWrap}>
         <TabHeader
           title="History"
@@ -670,7 +1108,8 @@ export default function History() {
           <View>
             <Text style={styles.intakeLabel}>Total Intake</Text>
             <Text style={styles.intakeValue}>
-              {roundVolume(fromMl(totalIntakeMl, unit), unit)} <Text style={styles.intakeUnit}>{unit}</Text>
+              {roundVolume(fromMl(totalIntakeMl, unit), unit)}{" "}
+              <Text style={styles.intakeUnit}>{unit}</Text>
             </Text>
           </View>
           <View style={styles.intakeRight}>
@@ -682,11 +1121,15 @@ export default function History() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>History & Reports</Text>
           <Text style={styles.heroSub}>
-            Review daily logs, compare monthly performance, and export your hydration report.
+            Review daily logs, compare monthly performance, and export your
+            hydration report.
           </Text>
         </View>
 
@@ -720,17 +1163,25 @@ export default function History() {
                 >
                   <Ionicons name="chevron-back" size={14} color="#4F6A82" />
                 </Pressable>
-                <Text style={styles.compareMonthText}>{formatMonthKeyLabel(compareCurrentMonthKey)}</Text>
+                <Text style={styles.compareMonthText}>
+                  {formatMonthKeyLabel(compareCurrentMonthKey)}
+                </Text>
                 <Pressable
                   onPress={() => moveComparedMonth("current", -1)}
-                  disabled={availableMonthKeys.indexOf(compareCurrentMonthKey) <= 0}
+                  disabled={
+                    availableMonthKeys.indexOf(compareCurrentMonthKey) <= 0
+                  }
                   style={styles.compareMonthBtn}
                 >
                   <Ionicons name="chevron-forward" size={14} color="#4F6A82" />
                 </Pressable>
               </View>
               <Text style={styles.compareValue}>
-                {roundVolume(fromMl(monthlyComparison.currentTotal, unit), unit)} {unit}
+                {roundVolume(
+                  fromMl(monthlyComparison.currentTotal, unit),
+                  unit,
+                )}{" "}
+                {unit}
               </Text>
             </View>
             <View style={styles.compareBox}>
@@ -746,10 +1197,14 @@ export default function History() {
                 >
                   <Ionicons name="chevron-back" size={14} color="#4F6A82" />
                 </Pressable>
-                <Text style={styles.compareMonthText}>{formatMonthKeyLabel(comparePreviousMonthKey)}</Text>
+                <Text style={styles.compareMonthText}>
+                  {formatMonthKeyLabel(comparePreviousMonthKey)}
+                </Text>
                 <Pressable
                   onPress={() => moveComparedMonth("previous", -1)}
-                  disabled={availableMonthKeys.indexOf(comparePreviousMonthKey) <= 0}
+                  disabled={
+                    availableMonthKeys.indexOf(comparePreviousMonthKey) <= 0
+                  }
                   style={styles.compareMonthBtn}
                 >
                   <Ionicons name="chevron-forward" size={14} color="#4F6A82" />
@@ -780,14 +1235,17 @@ export default function History() {
             </Pressable>
             <View style={styles.historyDateCenter}>
               <Text style={styles.historyDateLabel}>Date</Text>
-              <Text style={styles.historyDateValue}>{selectedHistoryDateText}</Text>
+              <Text style={styles.historyDateValue}>
+                {selectedHistoryDateText}
+              </Text>
             </View>
             <Pressable
               onPress={() => moveHistoryDate(1)}
               disabled={selectedHistoryDate >= todayKey}
               style={[
                 styles.historyDateArrowBtn,
-                selectedHistoryDate >= todayKey && styles.historyDateArrowBtnDisabled,
+                selectedHistoryDate >= todayKey &&
+                  styles.historyDateArrowBtnDisabled,
               ]}
             >
               <Ionicons
@@ -821,13 +1279,21 @@ export default function History() {
                   <Text style={styles.historyAmount}>
                     {roundVolume(fromMl(log.amountMl, unit), unit)} {unit}
                   </Text>
-                  <Text style={styles.historyDateText}>{formatDate(log.timestamp)}</Text>
+                  <Text style={styles.historyDateText}>
+                    {formatDate(log.timestamp)}
+                  </Text>
                 </View>
                 <View style={styles.historyRight}>
                   <View style={styles.historyTimePill}>
-                    <Text style={styles.historyTimePillText}>{formatTime(log.timestamp)}</Text>
+                    <Text style={styles.historyTimePillText}>
+                      {formatTime(log.timestamp)}
+                    </Text>
                   </View>
-                  <Ionicons name="information-circle" size={20} color="#C3CEDB" />
+                  <Ionicons
+                    name="information-circle"
+                    size={20}
+                    color="#C3CEDB"
+                  />
                 </View>
               </View>
             ))
@@ -835,8 +1301,16 @@ export default function History() {
         </View>
       </ScrollView>
 
-      <Modal visible={exportModalVisible} animationType="fade" transparent onRequestClose={() => setExportModalVisible(false)}>
-        <Pressable style={styles.exportModalBackdrop} onPress={() => setExportModalVisible(false)} />
+      <Modal
+        visible={exportModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setExportModalVisible(false)}
+      >
+        <Pressable
+          style={styles.exportModalBackdrop}
+          onPress={() => setExportModalVisible(false)}
+        />
         <View style={styles.exportModalWrap}>
           <View style={styles.exportModalCard}>
             <View style={styles.exportHeadingRow}>
@@ -845,21 +1319,33 @@ export default function History() {
               </View>
               <View style={styles.exportHeadingTextWrap}>
                 <Text style={styles.exportModalTitle}>Export Report</Text>
-                <Text style={styles.exportModalSub}>Choose date range and format</Text>
+                <Text style={styles.exportModalSub}>
+                  Choose date range and format
+                </Text>
               </View>
             </View>
 
             <View style={styles.exportFieldsWrap}>
               <View style={styles.exportFieldBlock}>
                 <Text style={styles.exportInputLabel}>From</Text>
-                <Pressable style={styles.exportDateButton} onPress={() => openCalendar("start")}>
-                  <Text style={styles.exportDateButtonText}>{formatDisplayDate(exportStartDate)}</Text>
+                <Pressable
+                  style={styles.exportDateButton}
+                  onPress={() => openCalendar("start")}
+                >
+                  <Text style={styles.exportDateButtonText}>
+                    {formatDisplayDate(exportStartDate)}
+                  </Text>
                 </Pressable>
               </View>
               <View style={styles.exportFieldBlock}>
                 <Text style={styles.exportInputLabel}>To</Text>
-                <Pressable style={styles.exportDateButton} onPress={() => openCalendar("end")}>
-                  <Text style={styles.exportDateButtonText}>{formatDisplayDate(exportEndDate)}</Text>
+                <Pressable
+                  style={styles.exportDateButton}
+                  onPress={() => openCalendar("end")}
+                >
+                  <Text style={styles.exportDateButtonText}>
+                    {formatDisplayDate(exportEndDate)}
+                  </Text>
                 </Pressable>
               </View>
             </View>
@@ -900,12 +1386,23 @@ export default function History() {
         </View>
       </Modal>
 
-      <Modal visible={calendarVisible} animationType="fade" transparent onRequestClose={() => setCalendarVisible(false)}>
-        <Pressable style={styles.exportModalBackdrop} onPress={() => setCalendarVisible(false)} />
+      <Modal
+        visible={calendarVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setCalendarVisible(false)}
+      >
+        <Pressable
+          style={styles.exportModalBackdrop}
+          onPress={() => setCalendarVisible(false)}
+        />
         <View style={styles.exportPickerWrap}>
           <View style={styles.exportPickerCard}>
             <View style={styles.calendarHeader}>
-              <Pressable onPress={() => changeMonth(-1)} style={styles.calendarNavBtn}>
+              <Pressable
+                onPress={() => changeMonth(-1)}
+                style={styles.calendarNavBtn}
+              >
                 <Ionicons name="chevron-back" size={16} color="#35556E" />
               </Pressable>
               <Text style={styles.calendarMonthLabel}>
@@ -914,14 +1411,19 @@ export default function History() {
                   year: "numeric",
                 })}
               </Text>
-              <Pressable onPress={() => changeMonth(1)} style={styles.calendarNavBtn}>
+              <Pressable
+                onPress={() => changeMonth(1)}
+                style={styles.calendarNavBtn}
+              >
                 <Ionicons name="chevron-forward" size={16} color="#35556E" />
               </Pressable>
             </View>
 
             <View style={styles.calendarWeekRow}>
               {WEEK_DAYS.map((day, idx) => (
-                <Text key={`${day}-${idx}`} style={styles.calendarWeekDay}>{day}</Text>
+                <Text key={`${day}-${idx}`} style={styles.calendarWeekDay}>
+                  {day}
+                </Text>
               ))}
             </View>
 
@@ -956,13 +1458,17 @@ export default function History() {
               })}
             </View>
 
-            <Button mode="outlined" onPress={() => setCalendarVisible(false)} style={styles.exportPickerCloseBtn}>
+            <Button
+              mode="outlined"
+              onPress={() => setCalendarVisible(false)}
+              style={styles.exportPickerCloseBtn}
+            >
               Close
             </Button>
           </View>
         </View>
       </Modal>
-    </Screen>
+    </TabSwipeScreen>
   );
 }
 
@@ -1409,11 +1915,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   calendarDayCell: {
-    width: "14.2857%",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     aspectRatio: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 10,
   },
   calendarDayCellMuted: {
     opacity: 0.45,

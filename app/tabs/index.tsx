@@ -14,7 +14,7 @@ import {
 } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import Screen from "../../components/Screen";
+import TabSwipeScreen from "../../components/TabSwipeScreen";
 import TabHeader from "../../components/TabHeader";
 import LoadingAnimation from "../../components/LoadingAnimation";
 import { useProfile } from "../../hooks/useProfile";
@@ -67,7 +67,7 @@ export default function Dashboard() {
 
   if (profileLoading || loading) {
     return (
-      <Screen>
+      <TabSwipeScreen>
         <View style={styles.pageHeaderWrap}>
           <TabHeader
             title="Dashboard"
@@ -78,7 +78,7 @@ export default function Dashboard() {
         <View style={styles.center}>
           <LoadingAnimation size={96} />
         </View>
-      </Screen>
+      </TabSwipeScreen>
     );
   }
 
@@ -138,7 +138,7 @@ export default function Dashboard() {
   };
 
   return (
-    <Screen>
+    <TabSwipeScreen>
       <View style={styles.pageHeaderWrap}>
         <TabHeader
           title="Dashboard"
@@ -393,7 +393,7 @@ export default function Dashboard() {
           </Pressable>
         </Pressable>
       </Modal>
-    </Screen>
+    </TabSwipeScreen>
   );
 }
 

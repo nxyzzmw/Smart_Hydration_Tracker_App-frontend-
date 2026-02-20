@@ -40,6 +40,7 @@ export default function NotificationsTab() {
   }, []);
 
   useFocusEffect(
+
     useCallback(() => {
       loadNotifications();
     }, [loadNotifications])
@@ -55,7 +56,7 @@ export default function NotificationsTab() {
     setItems((prev) =>
       prev.map((row) => (row.id === item.id ? { ...row, read: true } : row))
     );
-    router.push("./tabs/index");
+    router.push("/tabs");
   };
 
   const handleMarkAllAsRead = async () => {
@@ -94,7 +95,7 @@ export default function NotificationsTab() {
           {items.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="notifications-off-outline" size={22} color="#7A96AD" />
-              <Text style={styles.emptyText}>No notifications today</Text>
+              <Text style={styles.emptyText}>No notifications yet</Text>
             </View>
           ) : (
             items.map((item) => (

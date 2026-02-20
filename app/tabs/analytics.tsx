@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import Screen from "../../components/Screen";
+import TabSwipeScreen from "../../components/TabSwipeScreen";
 import TabHeader from "../../components/TabHeader";
 import LoadingAnimation from "../../components/LoadingAnimation";
 import { useAnalytics } from "../../hooks/useAnalytics";
@@ -253,7 +253,7 @@ const canGoPrevWeek = weekOffset < maxPreviousWeeks;
 const canGoNextWeek = weekOffset > 0;
 
   return (
-    <Screen>
+    <TabSwipeScreen>
       <View style={styles.pageHeaderWrap}>
         <TabHeader
           title="Insights"
@@ -581,7 +581,7 @@ const canGoNextWeek = weekOffset > 0;
           </View>
         </View>
       </Modal>
-    </Screen>
+    </TabSwipeScreen>
   );
 }
 
